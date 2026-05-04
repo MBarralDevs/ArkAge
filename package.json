@@ -10,9 +10,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage",
+    "test": "dotenv -e .env.local -- vitest run",
+    "test:watch": "dotenv -e .env.local -- vitest",
+    "test:coverage": "dotenv -e .env.local -- vitest run --coverage",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:generate": "dotenv -e .env.local -- prisma generate",
     "db:reset": "dotenv -e .env.local -- prisma migrate reset",
@@ -21,6 +21,8 @@
     "db:format": "dotenv -e .env.local -- prisma format"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "next": "16.2.4",
     "react": "19.2.4",
