@@ -12,4 +12,10 @@ export default defineConfig({
   datasource: {
     url: env("DIRECT_DATABASE_URL"),
   },
+  migrations: {
+    // Prisma 7 moved the seed command out of package.json into here.
+    // Invoked via `npm run db:seed` (which itself wraps this with dotenv-cli
+    // so prisma/seed.ts inherits .env.local at runtime).
+    seed: "tsx prisma/seed.ts",
+  },
 });
