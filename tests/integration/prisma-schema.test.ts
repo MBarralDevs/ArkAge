@@ -12,7 +12,11 @@ describe("prisma schema", () => {
   });
 
   it("can insert and query a Builder", async () => {
-    const wallet = Buffer.from("11".repeat(20), "hex");
+    // 0x22...22 = test sentinel; 0x11...11 is reserved by prisma/seed.ts.
+    const wallet = Buffer.from("22".repeat(20), "hex");
+    // Defensive cleanup in case a prior failed run left a row behind.
+    await db.builder.deleteMany({ where: { primaryWallet: wallet } });
+
     const created = await db.builder.create({
       data: { primaryWallet: wallet, displayName: "test-builder-schema" },
     });

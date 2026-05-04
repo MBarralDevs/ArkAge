@@ -1,14 +1,15 @@
 import { PrismaClient } from "@prisma/client";
-import { PrismaNeonHttp } from "@prisma/adapter-neon";
+import { PrismaNeon } from "@prisma/adapter-neon";
 import { env } from "./env";
 
-// Prisma 7 requires a driver adapter. We use Neon's HTTP-based adapter
-// because most ArkAge code runs in Vercel Functions (short-lived) where
-// HTTP is faster than WebSocket due to no socket overhead per cold start.
+// Prisma 7 requires a driver adapter. We use Neon's WebSocket adapter
+// (PrismaNeon, not PrismaNeonHttp) because ArkAge relies on transactions
+// throughout — Plan B uses $transaction, interactive tx, and upsert
+// extensively, none of which work over HTTP (which is stateless).
 //
-// For long-running processes (e.g. Plan C SSE listener) consider switching
-// to PrismaNeon (WebSocket-based) at the call site if connection overhead
-// becomes a measurable cost.
+// WebSocket has slightly higher cold-start overhead than HTTP but is
+// the standard recommendation for Prisma + Neon on Vercel when
+// transactions are required.
 //
 // Singleton pattern prevents PrismaClient duplication during Next.js dev
 // hot-reload (each module re-evaluation would otherwise spawn a new client).
@@ -18,7 +19,7 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function buildClient(): PrismaClient {
-  const adapter = new PrismaNeonHttp(env.DATABASE_URL, {});
+  const adapter = new PrismaNeon({ connectionString: env.DATABASE_URL });
   return new PrismaClient({
     adapter,
     log:
