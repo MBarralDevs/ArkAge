@@ -1,0 +1,384 @@
+// ArkAge schema — spec §7
+// Conventions:
+//   - All monetary fields use NUMERIC(38,0) raw token units.
+//     USDC ERC-20 = 6 decimals (most app-level amounts).
+//     Native gas representation = 18 decimals (gas accounting only).
+//   - Append-only event tables enforce idempotency via
+//     UNIQUE(chainId, txHash, logIndex).
+//   - JSONB used for variable shape; typed columns for query-critical fields.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Prisma 7: connection URLs live in prisma.config.ts (datasource.url),
+  // populated from .env.local via dotenv-cli. Runtime DATABASE_URL is
+  // wired into PrismaClient through a driver adapter (Plan A Task 22).
+}
+
+// =============================================================
+// Identity & wallets
+// =============================================================
+
+model Builder {
+  id            BigInt   @id @default(autoincrement())
+  primaryWallet Bytes    @unique @map("primary_wallet")
+  displayName   String?  @map("display_name")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  wallets       Wallet[]
+
+  @@map("builders")
+}
+
+model Wallet {
+  id               BigInt   @id @default(autoincrement())
+  address          Bytes    @unique
+  tier             Int      @db.SmallInt
+  custody          String // 'modular' | 'dcw' | 'system'
+  accountType      String   @map("account_type") // 'msca' | 'eoa'
+  builderId        BigInt?  @map("builder_id")
+  circleWalletId   String?  @map("circle_wallet_id")
+  status           String   @default("active") // 'active' | 'paused' | 'revoked'
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  builder          Builder? @relation(fields: [builderId], references: [id])
+  agentsAsOperator Agent[]
+
+  @@map("wallets")
+}
+
+model Agent {
+  id                      BigInt                 @id @default(autoincrement())
+  agentId                 Decimal                @unique @map("agent_id") @db.Decimal(78, 0)
+  identityOwnerWallet     Bytes                  @map("identity_owner_wallet")
+  currentOperatorWalletId BigInt                 @map("current_operator_wallet_id")
+  currentMetadataId       BigInt?                @map("current_metadata_id")
+  currentPolicyId         BigInt?                @map("current_policy_id")
+  agentWalletAddress      Bytes                  @map("agent_wallet_address")
+  registeredAtBlock       BigInt                 @map("registered_at_block")
+  active                  Boolean                @default(true)
+  createdAt               DateTime               @default(now()) @map("created_at")
+  updatedAt               DateTime               @updatedAt @map("updated_at")
+  currentOperatorWallet   Wallet                 @relation(fields: [currentOperatorWalletId], references: [id])
+  metadata                AgentMetadata[]
+  policies                Policy[]
+  jobsAsClient            Job[]                  @relation("ClientAgent")
+  jobsAsProvider          Job[]                  @relation("ProviderAgent")
+  reputationFeedback      ReputationFeedback[]
+  reputationValidations   ReputationValidation[]
+  x402Endpoints           X402Endpoint[]
+  x402SessionsAsBuyer     X402Session[]          @relation("BuyerAgent")
+  x402SessionsAsSeller    X402Session[]          @relation("SellerAgent")
+
+  @@map("agents")
+}
+
+model AgentMetadata {
+  id            BigInt    @id @default(autoincrement())
+  agentId       BigInt    @map("agent_id")
+  metadataUri   String    @map("metadata_uri")
+  metadataJsonb Json?     @map("metadata_jsonb")
+  fetchedAt     DateTime? @map("fetched_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  agent         Agent     @relation(fields: [agentId], references: [id])
+
+  @@map("agent_metadata")
+}
+
+// =============================================================
+// Policies (append-only versioned)
+// =============================================================
+
+model Policy {
+  id               BigInt    @id @default(autoincrement())
+  agentId          BigInt    @map("agent_id")
+  version          Int
+  bodyJsonb        Json      @map("body_jsonb")
+  canonicalHash    Bytes     @map("canonical_hash")
+  validFrom        DateTime  @map("valid_from")
+  validTo          DateTime? @map("valid_to")
+  authoredByWallet Bytes     @map("authored_by_wallet")
+  authoringTx      Bytes?    @map("authoring_tx")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  agent            Agent     @relation(fields: [agentId], references: [id])
+
+  @@unique([agentId, version])
+  @@map("policies")
+}
+
+// =============================================================
+// Jobs (ERC-8183) — USDC ERC-20, 6 decimals on monetary fields
+// =============================================================
+
+model Job {
+  id               BigInt          @id @default(autoincrement())
+  jobId            Decimal         @unique @map("job_id") @db.Decimal(78, 0)
+  clientAgentId    BigInt          @map("client_agent_id")
+  providerAgentId  BigInt?         @map("provider_agent_id")
+  evaluatorAddress Bytes           @map("evaluator_address")
+  evaluatorTier    String?         @map("evaluator_tier")
+  status           String // 'open' | 'funded' | 'submitted' | 'completed' | 'rejected' | 'expired'
+  budget           Decimal?        @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  evaluatorFee     Decimal?        @map("evaluator_fee") @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  descriptionUri   String?         @map("description_uri")
+  descriptionHash  Bytes?          @map("description_hash")
+  hookAddress      Bytes           @map("hook_address")
+  expiredAt        DateTime        @map("expired_at")
+  reasonHash       Bytes?          @map("reason_hash")
+  createdAtBlock   BigInt?         @map("created_at_block")
+  completedAtBlock BigInt?         @map("completed_at_block")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+  clientAgent      Agent           @relation("ClientAgent", fields: [clientAgentId], references: [id])
+  providerAgent    Agent?          @relation("ProviderAgent", fields: [providerAgentId], references: [id])
+  events           JobEvent[]
+  evaluations      JobEvaluation[]
+
+  @@index([clientAgentId, status, createdAt(sort: Desc)])
+  @@index([providerAgentId, status, createdAt(sort: Desc)])
+  @@map("jobs")
+}
+
+model JobEvent {
+  id           BigInt   @id @default(autoincrement())
+  jobId        BigInt   @map("job_id")
+  eventKind    String   @map("event_kind")
+  actorAddress Bytes    @map("actor_address")
+  payloadJsonb Json?    @map("payload_jsonb")
+  chainId      Int      @map("chain_id")
+  txHash       Bytes    @map("tx_hash")
+  logIndex     Int      @map("log_index")
+  blockNumber  BigInt   @map("block_number")
+  blockTime    DateTime @map("block_time")
+  createdAt    DateTime @default(now()) @map("created_at")
+  job          Job      @relation(fields: [jobId], references: [id])
+
+  @@unique([chainId, txHash, logIndex])
+  @@index([jobId, blockTime])
+  @@map("job_events")
+}
+
+model JobEvaluation {
+  id                      BigInt   @id @default(autoincrement())
+  jobId                   BigInt   @map("job_id")
+  workflowRunId           String   @map("workflow_run_id")
+  model                   String
+  tier                    String
+  inputTokens             Int?     @map("input_tokens")
+  outputTokens            Int?     @map("output_tokens")
+  costUsd                 Decimal? @map("cost_usd") @db.Decimal(10, 4)
+  promptVersion           String   @map("prompt_version")
+  promptHash              Bytes    @map("prompt_hash")
+  deliverableHash         Bytes    @map("deliverable_hash")
+  reasoningText           String   @map("reasoning_text") @db.Text
+  structuredResponseJsonb Json?    @map("structured_response_jsonb")
+  verdict                 String
+  score                   Int?
+  evidenceUri             String   @map("evidence_uri")
+  evidenceHash            Bytes    @map("evidence_hash")
+  settlementTx            Bytes?   @map("settlement_tx")
+  createdAt               DateTime @default(now()) @map("created_at")
+  job                     Job      @relation(fields: [jobId], references: [id])
+
+  @@map("job_evaluations")
+}
+
+// =============================================================
+// Reputation (ERC-8004)
+// =============================================================
+
+model ReputationFeedback {
+  id               BigInt   @id @default(autoincrement())
+  agentId          BigInt   @map("agent_id") // recipient
+  submitterAddress Bytes    @map("submitter_address") // ReputationHook for ArkAge feedback
+  source           String // 'arkage_hook' | 'external'
+  score            Int?
+  decimals         Int?     @db.SmallInt
+  tag1             String?
+  tag2             String?
+  endpoint         String?
+  feedbackUri      String?  @map("feedback_uri")
+  feedbackHash     Bytes?   @map("feedback_hash")
+  jobId            BigInt?  @map("job_id")
+  chainId          Int      @map("chain_id")
+  txHash           Bytes    @map("tx_hash")
+  logIndex         Int      @map("log_index")
+  blockTime        DateTime @map("block_time")
+  createdAt        DateTime @default(now()) @map("created_at")
+  agent            Agent    @relation(fields: [agentId], references: [id])
+
+  @@unique([chainId, txHash, logIndex])
+  @@index([agentId, createdAt(sort: Desc)])
+  @@map("reputation_feedback")
+}
+
+model ReputationValidation {
+  id               BigInt    @id @default(autoincrement())
+  agentId          BigInt    @map("agent_id")
+  requestHash      Bytes     @unique @map("request_hash")
+  validatorAddress Bytes     @map("validator_address")
+  requestUri       String?   @map("request_uri")
+  responseCode     Int?      @map("response_code") @db.SmallInt
+  responseUri      String?   @map("response_uri")
+  requestedAt      DateTime? @map("requested_at")
+  respondedAt      DateTime? @map("responded_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  agent            Agent     @relation(fields: [agentId], references: [id])
+
+  @@map("reputation_validations")
+}
+
+// =============================================================
+// x402
+// =============================================================
+
+model X402Endpoint {
+  id            BigInt        @id @default(autoincrement())
+  sellerAgentId BigInt        @map("seller_agent_id")
+  url           String
+  effectiveUrl  String        @map("effective_url")
+  hosting       String // 'self' | 'arkage-proxy'
+  pricePerCall  Decimal       @map("price_per_call") @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  tokenAddress  Bytes         @map("token_address")
+  schemaJsonb   Json?         @map("schema_jsonb")
+  active        Boolean       @default(true)
+  registeredAt  DateTime      @default(now()) @map("registered_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  sellerAgent   Agent         @relation(fields: [sellerAgentId], references: [id])
+  receipts      X402Receipt[]
+
+  @@map("x402_endpoints")
+}
+
+model X402Session {
+  id             BigInt        @id @default(autoincrement())
+  buyerAgentId   BigInt        @map("buyer_agent_id")
+  sellerAgentId  BigInt        @map("seller_agent_id")
+  workflowRunId  String        @map("workflow_run_id")
+  status         String // 'open' | 'closing' | 'closed' | 'risk_gated'
+  openedAt       DateTime      @map("opened_at")
+  lastActivityAt DateTime      @map("last_activity_at")
+  closedAt       DateTime?     @map("closed_at")
+  totalCalls     Int           @default(0) @map("total_calls")
+  totalAmount    Decimal       @default(0) @map("total_amount") @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+  buyerAgent     Agent         @relation("BuyerAgent", fields: [buyerAgentId], references: [id])
+  sellerAgent    Agent         @relation("SellerAgent", fields: [sellerAgentId], references: [id])
+  receipts       X402Receipt[]
+
+  @@index([buyerAgentId, status])
+  @@map("x402_sessions")
+}
+
+model X402Receipt {
+  id                     BigInt        @id @default(autoincrement())
+  sessionId              BigInt        @map("session_id")
+  endpointId             BigInt        @map("endpoint_id")
+  paymentKind            String        @map("payment_kind") // 'gateway_batched' (v1)
+  buyerWallet            Bytes         @map("buyer_wallet")
+  sellerWallet           Bytes         @map("seller_wallet")
+  amount                 Decimal       @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  requestHash            Bytes         @map("request_hash")
+  responseHash           Bytes?        @map("response_hash")
+  paymentSignature       Bytes         @map("payment_signature")
+  httpStatus             Int?          @map("http_status") @db.SmallInt
+  facilitatorProcessedAt DateTime      @map("facilitator_processed_at")
+  seq                    Int
+  createdAt              DateTime      @default(now()) @map("created_at")
+  session                X402Session   @relation(fields: [sessionId], references: [id])
+  endpoint               X402Endpoint  @relation(fields: [endpointId], references: [id])
+  disputes               X402Dispute[]
+
+  @@unique([sessionId, seq])
+  @@index([buyerWallet, sellerWallet, facilitatorProcessedAt(sort: Desc)])
+  @@map("x402_receipts")
+}
+
+model X402Dispute {
+  id             BigInt      @id @default(autoincrement())
+  receiptId      BigInt      @map("receipt_id")
+  raisedByWallet Bytes       @map("raised_by_wallet")
+  reason         String
+  evidenceJsonb  Json?       @map("evidence_jsonb")
+  workflowRunId  String?     @map("workflow_run_id")
+  status         String
+  resolutionTx   Bytes?      @map("resolution_tx")
+  resolvedAt     DateTime?   @map("resolved_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  receipt        X402Receipt @relation(fields: [receiptId], references: [id])
+
+  @@map("x402_disputes")
+}
+
+// =============================================================
+// Treasury
+// =============================================================
+
+model TreasuryMovement {
+  id           BigInt    @id @default(autoincrement())
+  kind         String
+  sourceKind   String?   @map("source_kind")
+  sourceId     BigInt?   @map("source_id")
+  amount       Decimal   @db.Decimal(38, 0) // USDC ERC-20, 6 decimals
+  tokenAddress Bytes     @map("token_address")
+  direction    String
+  counterparty Bytes?
+  txHash       Bytes?    @map("tx_hash")
+  blockTime    DateTime? @map("block_time")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@map("treasury_movements")
+}
+
+// =============================================================
+// System
+// =============================================================
+
+model WorkflowRun {
+  id             BigInt    @id @default(autoincrement())
+  runId          String    @unique @map("run_id")
+  kind           String
+  kindId         BigInt    @map("kind_id")
+  status         String
+  startedAt      DateTime  @map("started_at")
+  lastAdvancedAt DateTime  @map("last_advanced_at")
+  completedAt    DateTime? @map("completed_at")
+  parentRunId    String?   @map("parent_run_id")
+  error          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([kind, status, lastAdvancedAt])
+  @@map("workflow_runs")
+}
+
+model IndexerCursor {
+  id              BigInt   @id @default(autoincrement())
+  source          String
+  chainId         Int      @map("chain_id")
+  contractAddress Bytes    @map("contract_address")
+  lastBlock       BigInt   @map("last_block")
+  lastProcessedAt DateTime @map("last_processed_at")
+
+  @@unique([source, chainId, contractAddress])
+  @@map("indexer_cursor")
+}
+
+model AuditLog {
+  id           BigInt   @id @default(autoincrement())
+  actorKind    String   @map("actor_kind")
+  actorId      String?  @map("actor_id")
+  action       String
+  targetKind   String?  @map("target_kind")
+  targetId     String?  @map("target_id")
+  payloadJsonb Json?    @map("payload_jsonb")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("audit_log")
+}
