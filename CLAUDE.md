@@ -8,6 +8,12 @@ Repo memory for Claude Code (and humans) working on **ArkAge** — the agentic-c
 > 3. `docs/superpowers/plans/2026-05-02-plan-{a,b,c,d}-*.md` — tasked implementation, in order
 > 4. Per-area runbooks under `docs/runbooks/` — once contracts are deployed
 
+> **Current state (2026-05-02):** repo contains the design spec, 4 implementation plans, and this file. The directory structure below is what Plan A produces — none of `src/`, `contracts/`, or `prisma/` exists yet. Start by executing Plan A.
+
+> **Heads-up before you start:** Two things in this repo will trip you up if you don't expect them:
+> 1. **The Vercel Plugin's post-tool-use validator generates many false positives** for `setTimeout`/`setInterval`/`require`/`fetch` strings, treating them as workflow-sandbox violations even when they're inside React client components, Vercel Function route handlers, Foundry/Solidity code, Node.js config files, or Playwright tests. See "Validator hook noise" below — judge fast, ignore when off-base.
+> 2. The repo is **docs-only today**; everything else gets built by executing Plan A.
+
 ---
 
 ## What ArkAge is
@@ -50,6 +56,13 @@ The `bytes32 reason` parameter on ERC-8183 `complete`/`reject` is `keccak256(can
 
 ### Idempotency
 Every MCP tool that mutates state takes an `idempotencyKey`. Every workflow step that mutates external state attaches a deterministic key (e.g., `complete:${jobId}:v1`). Hook tokens are deterministic strings (e.g., `8183:JobSubmitted:${jobId}`) so push and rescue paths resolve to the same hook (no-op on duplicate fire).
+
+### AI Gateway model IDs
+Model slugs use **dots, not hyphens**, for version numbers — `anthropic/claude-haiku-4.5`, `anthropic/claude-sonnet-4.6`, `anthropic/claude-opus-4.7` (NOT `claude-sonnet-4-6`). The Vercel Plugin's validator hook enforces this; wrong format errors out as "Model slug uses hyphens." Verify the current list before locking IDs at implementation time:
+
+```bash
+curl -s https://ai-gateway.vercel.sh/v1/models | jq -r '[.data[] | select(.id | startswith("anthropic/")) | .id] | reverse | .[]'
+```
 
 ### x402 facilitator overlay (LBC-2)
 ArkAge does **not** run its own x402 facilitator. We wrap **Circle's hosted facilitator** with three differentiators: agentId-keyed receipt tracking, ERC-8004 reputation gates inside `x402PaymentSession`, and the dispute resolution workflow. Keep this in mind when reading Plan D — most x402 code is "wrap the SDK", not infrastructure.
@@ -190,7 +203,7 @@ vercel env pull .env.local              # sync env from Vercel
 - Multicall3: `0xcA11bde05977b3631167028862bE2a173976CA11`
 - CREATE2 Factory: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
 
-**Tutorial-sourced (verify pre-impl per spec §11)**
+**Tutorial-sourced ⚠️ verify before any deploy or runtime use** — these came from Arc tutorial pages and may have been redeployed. Run the Pre-implementation verification checklist below before pinning them in code:
 - ERC-8183 AgenticCommerce: `0x0747EEf0706327138c69792bF28Cd525089e4583`
 - ERC-8004 IdentityRegistry: `0x8004A818BFB912233c491871b3d84c89A494BD9e`
 - ERC-8004 ReputationRegistry: `0x8004B663056A597Dffe9eCcC1965A193B7388713`
@@ -331,6 +344,7 @@ When you (a future Claude session) start work in this repo:
 - If a task is "fix a bug", invoke `superpowers:systematic-debugging` first. Don't propose fixes without a root cause.
 - If you're about to claim work is complete, invoke `superpowers:verification-before-completion` — run the relevant test suite and confirm output before asserting success.
 - The validator hook will fire false positives constantly. Read its output, judge fast, ignore when off-base, fix when on-target.
+- Cross-session project state lives at `~/.claude/projects/-home-mbarr-ArkAge/memory/`. `MEMORY.md` is the index; `project_arkage_design.md` has the latest project status. Memory loads automatically at session start — you don't need to fetch it.
 - This file is the orientation. The spec is the truth. The plans are the executable. Don't paraphrase — link.
 
 ---
