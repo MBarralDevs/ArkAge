@@ -12,7 +12,9 @@ Repo memory for Claude Code (and humans) working on **ArkAge** — the agentic-c
 
 > **Heads-up before you start:** Two things in this repo will trip you up if you don't expect them:
 > 1. **The Vercel Plugin's post-tool-use validator generates many false positives** for `setTimeout`/`setInterval`/`require`/`fetch` strings, treating them as workflow-sandbox violations even when they're inside React client components, Vercel Function route handlers, Foundry/Solidity code, Node.js config files, or Playwright tests. See "Validator hook noise" below — judge fast, ignore when off-base.
-> 2. The repo is **docs-only today**; everything else gets built by executing Plan A.
+> 2. **Next.js 16 has breaking changes from prior versions** — verify APIs against `node_modules/next/dist/docs/` before writing Next.js code. The bundled `AGENTS.md` (auto-loaded below) restates this for cross-tool consistency.
+
+@AGENTS.md
 
 ---
 
