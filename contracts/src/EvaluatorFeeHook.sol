@@ -27,12 +27,18 @@ contract EvaluatorFeeHook is IACPHook {
     // ---- Custom errors ----
     error OnlyACP();
     error FeeTransferFailed();
+    error OnlyInitializer();
+    error TrustedCallerAlreadySet();
 
-    // ---- Immutable trust addresses ----
+    // ---- Immutable: source of Job state + token + treasury ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable USDC;
     address public immutable TREASURY;
     address public immutable AGENT_REGISTRY;
+    address public immutable INITIALIZER;
+
+    /// @notice See PolicyHook for the pattern; settable-once trusted caller.
+    address public trustedCaller;
 
     /// @notice Defense-in-depth idempotency: prevents double-charging if ACP
     ///         ever calls complete twice for the same job.
@@ -45,6 +51,18 @@ contract EvaluatorFeeHook is IACPHook {
         USDC = usdc;
         TREASURY = treasury;
         AGENT_REGISTRY = agentRegistry;
+        INITIALIZER = msg.sender;
+    }
+
+    function setTrustedCaller(address caller) external {
+        if (msg.sender != INITIALIZER) revert OnlyInitializer();
+        if (trustedCaller != address(0)) revert TrustedCallerAlreadySet();
+        trustedCaller = caller;
+    }
+
+    function _authorizedCaller() internal view returns (address) {
+        address t = trustedCaller;
+        return t == address(0) ? AGENTIC_COMMERCE : t;
     }
 
     function beforeAction(uint256, bytes4, bytes calldata) external pure override {
@@ -52,7 +70,7 @@ contract EvaluatorFeeHook is IACPHook {
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata) external override {
-        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
+        if (msg.sender != _authorizedCaller()) revert OnlyACP();
 
         // Only complete pulls a fee. reject and other selectors return early
         // BEFORE the idempotency lock so they don't accidentally seal the jobId.

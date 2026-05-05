@@ -143,4 +143,18 @@ contract ReputationHookTest is Test {
         acp.callAfterAction(address(hook), 1, IACP.reject.selector, "");
         assertEq(repReg.callsLength(), 1, "idempotency violated");
     }
+
+    // ---- trusted-caller bootstrap error paths ----
+
+    function test_setTrustedCaller_revertsIfNotInitializer() public {
+        vm.expectRevert(ReputationHook.OnlyInitializer.selector);
+        vm.prank(address(0xBAD));
+        hook.setTrustedCaller(address(0x1234));
+    }
+
+    function test_setTrustedCaller_revertsIfAlreadySet() public {
+        hook.setTrustedCaller(address(0x1234));
+        vm.expectRevert(ReputationHook.TrustedCallerAlreadySet.selector);
+        hook.setTrustedCaller(address(0x5678));
+    }
 }

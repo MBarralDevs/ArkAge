@@ -23,11 +23,19 @@ import {IAgentRegistry} from "./interfaces/IAgentRegistry.sol";
 contract ReputationHook is IACPHook {
     // ---- Custom errors ----
     error OnlyACP();
+    error OnlyInitializer();
+    error TrustedCallerAlreadySet();
 
-    // ---- Immutable trust addresses ----
+    // ---- Immutable: source of Job state + reputation registry ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable REPUTATION_REGISTRY;
     address public immutable AGENT_REGISTRY;
+    address public immutable INITIALIZER;
+
+    /// @notice See PolicyHook for the pattern; settable-once trusted caller
+    ///         distinct from AGENTIC_COMMERCE so the HookComposer can be
+    ///         the on-chain msg.sender while job state still reads from ACP.
+    address public trustedCaller;
 
     string private constant TAG_SRC = "src:acp";
     string private constant TAG_COMPLETE = "outcome:complete";
@@ -42,6 +50,18 @@ contract ReputationHook is IACPHook {
         AGENTIC_COMMERCE = acp;
         REPUTATION_REGISTRY = reputationRegistry;
         AGENT_REGISTRY = agentRegistry;
+        INITIALIZER = msg.sender;
+    }
+
+    function setTrustedCaller(address caller) external {
+        if (msg.sender != INITIALIZER) revert OnlyInitializer();
+        if (trustedCaller != address(0)) revert TrustedCallerAlreadySet();
+        trustedCaller = caller;
+    }
+
+    function _authorizedCaller() internal view returns (address) {
+        address t = trustedCaller;
+        return t == address(0) ? AGENTIC_COMMERCE : t;
     }
 
     function beforeAction(uint256, bytes4, bytes calldata) external pure override {
@@ -49,7 +69,7 @@ contract ReputationHook is IACPHook {
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata) external override {
-        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
+        if (msg.sender != _authorizedCaller()) revert OnlyACP();
 
         // Only complete/reject can write reputation; bail early on other selectors
         // BEFORE checking idempotency so non-terminal hookable actions don't

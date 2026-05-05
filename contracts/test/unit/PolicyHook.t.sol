@@ -155,4 +155,19 @@ contract PolicyHookTest is Test {
         // bytes4(0) is an unknown selector — should hit the fallback `return job.client`
         acp.callBeforeAction(address(hook), 1, bytes4(0), "");
     }
+
+    // ---- trusted-caller bootstrap error paths ----
+
+    function test_setTrustedCaller_revertsIfNotInitializer() public {
+        vm.expectRevert(PolicyHook.OnlyInitializer.selector);
+        vm.prank(address(0xBAD));
+        hook.setTrustedCaller(address(0x1234));
+    }
+
+    function test_setTrustedCaller_revertsIfAlreadySet() public {
+        // setUp didn't set trustedCaller — first call locks it.
+        hook.setTrustedCaller(address(0x1234));
+        vm.expectRevert(PolicyHook.TrustedCallerAlreadySet.selector);
+        hook.setTrustedCaller(address(0x5678));
+    }
 }

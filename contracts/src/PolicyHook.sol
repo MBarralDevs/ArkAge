@@ -18,18 +18,41 @@ contract PolicyHook is IACPHook {
     error OnlyACP();
     error AgentInactive();
     error PerTxCapExceeded();
+    error OnlyInitializer();
+    error TrustedCallerAlreadySet();
 
-    // ---- Immutable trust addresses ----
+    // ---- Immutable: source of Job state ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable AGENT_REGISTRY;
+    address public immutable INITIALIZER;
+
+    /// @notice The address allowed to invoke beforeAction/afterAction. In
+    ///         production this is the HookComposer (which the ACP calls
+    ///         directly). Settable exactly once by the initializer (the
+    ///         deployer of this contract). Until set, falls back to
+    ///         AGENTIC_COMMERCE so the hook is usable standalone in tests
+    ///         and in BYO scenarios where the ACP calls the hook directly.
+    address public trustedCaller;
 
     constructor(address acp, address agentRegistry) {
         AGENTIC_COMMERCE = acp;
         AGENT_REGISTRY = agentRegistry;
+        INITIALIZER = msg.sender;
+    }
+
+    function setTrustedCaller(address caller) external {
+        if (msg.sender != INITIALIZER) revert OnlyInitializer();
+        if (trustedCaller != address(0)) revert TrustedCallerAlreadySet();
+        trustedCaller = caller;
+    }
+
+    function _authorizedCaller() internal view returns (address) {
+        address t = trustedCaller;
+        return t == address(0) ? AGENTIC_COMMERCE : t;
     }
 
     function beforeAction(uint256 jobId, bytes4 selector, bytes calldata /* data */) external override {
-        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
+        if (msg.sender != _authorizedCaller()) revert OnlyACP();
 
         IACP.Job memory job = IACP(AGENTIC_COMMERCE).getJob(jobId);
         address actor = _resolveActor(selector, job);

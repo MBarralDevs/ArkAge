@@ -142,4 +142,18 @@ contract EvaluatorFeeHookTest is Test {
         acp.callAfterAction(address(hook), JOB_ID, IACP.fund.selector, "");
         assertEq(usdc.balanceOf(treasury), treasuryBefore);
     }
+
+    // ---- trusted-caller bootstrap error paths ----
+
+    function test_setTrustedCaller_revertsIfNotInitializer() public {
+        vm.expectRevert(EvaluatorFeeHook.OnlyInitializer.selector);
+        vm.prank(address(0xBAD));
+        hook.setTrustedCaller(address(0x1234));
+    }
+
+    function test_setTrustedCaller_revertsIfAlreadySet() public {
+        hook.setTrustedCaller(address(0x1234));
+        vm.expectRevert(EvaluatorFeeHook.TrustedCallerAlreadySet.selector);
+        hook.setTrustedCaller(address(0x5678));
+    }
 }
