@@ -77,7 +77,7 @@ contract EvaluatorFeeHookTest is Test {
     }
 
     function test_afterAction_revertsIfNotACP() public {
-        vm.expectRevert(bytes("only ACP"));
+        vm.expectRevert(EvaluatorFeeHook.OnlyACP.selector);
         hook.afterAction(JOB_ID, IACP.complete.selector, "");
     }
 

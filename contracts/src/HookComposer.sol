@@ -23,7 +23,13 @@ import {IACPHook} from "./interfaces/IACPHook.sol";
 ///         requires deploying a new HookComposer and updating the ERC-8183
 ///         job's `hook` slot at posting time.
 contract HookComposer is IACPHook {
+    // ---- Custom errors ----
+    error OnlyACP();
+
+    // ---- Immutable trust addresses ----
     address public immutable AGENTIC_COMMERCE;
+
+    // ---- Hook arrays (set in constructor, immutable in spirit) ----
     address[] public beforeHooks;
     address[] public afterHooks;
 
@@ -38,14 +44,14 @@ contract HookComposer is IACPHook {
     }
 
     function beforeAction(uint256 jobId, bytes4 selector, bytes calldata data) external override {
-        require(msg.sender == AGENTIC_COMMERCE, "only ACP");
+        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
         for (uint256 i = 0; i < beforeHooks.length; i++) {
             IACPHook(beforeHooks[i]).beforeAction(jobId, selector, data);
         }
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata data) external override {
-        require(msg.sender == AGENTIC_COMMERCE, "only ACP");
+        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
         for (uint256 i = 0; i < afterHooks.length; i++) {
             IACPHook(afterHooks[i]).afterAction(jobId, selector, data);
         }

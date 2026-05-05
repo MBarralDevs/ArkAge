@@ -82,7 +82,7 @@ contract HookComposerTest is Test {
     }
 
     function test_revertsIfCallerNotACP() public {
-        vm.expectRevert(bytes("only ACP"));
+        vm.expectRevert(HookComposer.OnlyACP.selector);
         composer.beforeAction(1, bytes4(0), "");
     }
 
@@ -104,7 +104,7 @@ contract HookComposerTest is Test {
 
     function test_afterAction_revertsIfCallerNotACP() public {
         // Same auth check on the after path — both must be gated.
-        vm.expectRevert(bytes("only ACP"));
+        vm.expectRevert(HookComposer.OnlyACP.selector);
         composer.afterAction(1, bytes4(0), "");
     }
 

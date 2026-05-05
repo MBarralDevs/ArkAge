@@ -87,7 +87,7 @@ contract ReputationHookTest is Test {
     }
 
     function test_afterAction_revertsIfCallerNotACP() public {
-        vm.expectRevert(bytes("only ACP"));
+        vm.expectRevert(ReputationHook.OnlyACP.selector);
         hook.afterAction(1, IACP.complete.selector, "");
     }
 

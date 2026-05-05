@@ -45,7 +45,7 @@ contract PolicyHookTest is Test {
     // ---- Plan A's 5 specified tests ----
 
     function test_beforeAction_revertsIfCallerNotACP() public {
-        vm.expectRevert(bytes("only ACP"));
+        vm.expectRevert(PolicyHook.OnlyACP.selector);
         hook.beforeAction(1, IACP.fund.selector, "");
     }
 
@@ -57,7 +57,7 @@ contract PolicyHookTest is Test {
         // PolicyHook lookup finds a registered (but inactive) agent.
         acp.setJob(1, _job(operator, 0));
 
-        vm.expectRevert(bytes("policy: agent inactive"));
+        vm.expectRevert(PolicyHook.AgentInactive.selector);
         acp.callBeforeAction(address(hook), 1, IACP.setBudget.selector, "");
     }
 
@@ -68,7 +68,7 @@ contract PolicyHookTest is Test {
         j.client = operator;
         acp.setJob(1, j);
 
-        vm.expectRevert(bytes("policy: per-tx cap"));
+        vm.expectRevert(PolicyHook.PerTxCapExceeded.selector);
         acp.callBeforeAction(address(hook), 1, IACP.fund.selector, "");
     }
 
@@ -93,7 +93,7 @@ contract PolicyHookTest is Test {
         // Pre-fix this would have allowed; post-fix the cap check looks at
         // job.budget (10M > 5M cap) and reverts regardless of data contents.
         bytes memory maliciousData = abi.encode(uint256(1));
-        vm.expectRevert(bytes("policy: per-tx cap"));
+        vm.expectRevert(PolicyHook.PerTxCapExceeded.selector);
         acp.callBeforeAction(address(hook), 1, IACP.fund.selector, maliciousData);
     }
 

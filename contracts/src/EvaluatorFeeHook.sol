@@ -24,6 +24,11 @@ interface IERC20Min {
 ///
 ///         Universal invariant (Risk #1): no NFT-touching code paths.
 contract EvaluatorFeeHook is IACPHook {
+    // ---- Custom errors ----
+    error OnlyACP();
+    error FeeTransferFailed();
+
+    // ---- Immutable trust addresses ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable USDC;
     address public immutable TREASURY;
@@ -47,7 +52,7 @@ contract EvaluatorFeeHook is IACPHook {
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata) external override {
-        require(msg.sender == AGENTIC_COMMERCE, "only ACP");
+        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
 
         // Only complete pulls a fee. reject and other selectors return early
         // BEFORE the idempotency lock so they don't accidentally seal the jobId.
@@ -68,7 +73,7 @@ contract EvaluatorFeeHook is IACPHook {
         _processed[jobId] = true;
 
         bool ok = IERC20Min(USDC).transferFrom(job.provider, TREASURY, fee);
-        require(ok, "fee transfer failed");
+        if (!ok) revert FeeTransferFailed();
 
         emit FeeCollected(jobId, job.provider, fee);
     }

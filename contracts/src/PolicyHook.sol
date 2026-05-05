@@ -14,6 +14,12 @@ import {IAgentRegistry} from "./interfaces/IAgentRegistry.sol";
 ///         Universal invariant (Risk #1): never owns or is approved-operator
 ///         of any ERC-8004 identity NFT — verified by the invariant test.
 contract PolicyHook is IACPHook {
+    // ---- Custom errors ----
+    error OnlyACP();
+    error AgentInactive();
+    error PerTxCapExceeded();
+
+    // ---- Immutable trust addresses ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable AGENT_REGISTRY;
 
@@ -23,7 +29,7 @@ contract PolicyHook is IACPHook {
     }
 
     function beforeAction(uint256 jobId, bytes4 selector, bytes calldata /* data */) external override {
-        require(msg.sender == AGENTIC_COMMERCE, "only ACP");
+        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
 
         IACP.Job memory job = IACP(AGENTIC_COMMERCE).getJob(jobId);
         address actor = _resolveActor(selector, job);
@@ -35,7 +41,7 @@ contract PolicyHook is IACPHook {
         // off-chain policy engine never sees those calls in the first place.
         if (info.operatorWallet == address(0)) return;
 
-        require(info.active, "policy: agent inactive");
+        if (!info.active) revert AgentInactive();
 
         // SECURITY: source the funded amount from the canonical Job state
         // rather than the caller-supplied `data` blob. The previous version
@@ -43,7 +49,7 @@ contract PolicyHook is IACPHook {
         // zero-out to bypass the cap. job.budget is set by the provider via
         // setBudget and is the actual amount being funded.
         if (selector == IACP.fund.selector) {
-            require(job.budget <= info.perTxCap, "policy: per-tx cap");
+            if (job.budget > info.perTxCap) revert PerTxCapExceeded();
         }
         // Additional selector-specific stateless gates can be added here.
     }

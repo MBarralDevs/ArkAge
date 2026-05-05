@@ -13,6 +13,18 @@ import {IACP} from "./interfaces/IACP.sol";
 ///         approved-operator of any ERC-8004 identity NFT. Verified by
 ///         test/invariant/HookOwnership.invariant.t.sol.
 contract AgentRegistry is IAgentRegistry {
+    // ---- Custom errors (gas-efficient: 4-byte selectors vs string messages) ----
+    error NotIdentityOwner();
+    error AlreadyRegistered();
+    error OperatorZero();
+    error OperatorAlreadyClaimed();
+    error NotRegistered();
+    error FeeAlreadyRecorded();
+    error NotJobClient();
+    error ClientNotRegistered();
+    error FeeExceedsMax();
+
+    // ---- Immutable trust addresses ----
     address public immutable IDENTITY_REGISTRY;
     address public immutable AGENTIC_COMMERCE;
 
@@ -32,7 +44,7 @@ contract AgentRegistry is IAgentRegistry {
     event JobFeeRecorded(uint256 indexed jobId, uint256 fee);
 
     modifier onlyIdentityOwner(uint256 agentId) {
-        require(IIdentityRegistry(IDENTITY_REGISTRY).ownerOf(agentId) == msg.sender, "not identity owner");
+        if (IIdentityRegistry(IDENTITY_REGISTRY).ownerOf(agentId) != msg.sender) revert NotIdentityOwner();
         _;
     }
 
@@ -55,14 +67,14 @@ contract AgentRegistry is IAgentRegistry {
         override
         onlyIdentityOwner(agentId)
     {
-        require(_agents[agentId].operatorWallet == address(0), "already registered");
-        require(op != address(0), "operator zero");
+        if (_agents[agentId].operatorWallet != address(0)) revert AlreadyRegistered();
+        if (op == address(0)) revert OperatorZero();
         // SECURITY: prevent cross-agent operator hijack. Without this guard, an
         // attacker who owns any cheap 8004 identity could claim another agent's
         // operator address and DoS or reroute their on-chain calls through
         // PolicyHook. The previous identity owner must vacate the slot first
         // via updateOperator before another agent can claim it.
-        require(agentIdByOperator[op] == 0, "operator already claimed");
+        if (agentIdByOperator[op] != 0) revert OperatorAlreadyClaimed();
         _agents[agentId] = AgentInfo({
             operatorWallet: op,
             currentPolicyHash: policy,
@@ -75,12 +87,12 @@ contract AgentRegistry is IAgentRegistry {
     }
 
     function updateOperator(uint256 agentId, address op) external override onlyIdentityOwner(agentId) {
-        require(op != address(0), "operator zero");
+        if (op == address(0)) revert OperatorZero();
         address prev = _agents[agentId].operatorWallet;
-        require(prev != address(0), "not registered");
+        if (prev == address(0)) revert NotRegistered();
         // SECURITY: same hijack guard as registerAgent — prevents one identity
         // from rotating into another agent's operator slot.
-        require(agentIdByOperator[op] == 0, "operator already claimed");
+        if (agentIdByOperator[op] != 0) revert OperatorAlreadyClaimed();
         agentIdByOperator[prev] = 0;
         _agents[agentId].operatorWallet = op;
         agentIdByOperator[op] = agentId;
@@ -92,7 +104,7 @@ contract AgentRegistry is IAgentRegistry {
         override
         onlyIdentityOwner(agentId)
     {
-        require(_agents[agentId].operatorWallet != address(0), "not registered");
+        if (_agents[agentId].operatorWallet == address(0)) revert NotRegistered();
         _agents[agentId].currentPolicyHash = policy;
         _agents[agentId].perTxCap = perTx;
         _agents[agentId].evaluatorFeeMax = evalFeeMax;
@@ -105,7 +117,7 @@ contract AgentRegistry is IAgentRegistry {
     }
 
     function reactivate(uint256 agentId) external override onlyIdentityOwner(agentId) {
-        require(_agents[agentId].operatorWallet != address(0), "not registered");
+        if (_agents[agentId].operatorWallet == address(0)) revert NotRegistered();
         _agents[agentId].active = true;
         emit AgentReactivated(agentId);
     }
@@ -115,14 +127,14 @@ contract AgentRegistry is IAgentRegistry {
     ///         - MUST NOT be already recorded
     ///         - fee MUST be <= the caller's registered evaluatorFeeMax
     function recordJobFee(uint256 jobId, uint256 fee) external override {
-        require(!jobFeeRecorded[jobId], "fee already recorded");
+        if (jobFeeRecorded[jobId]) revert FeeAlreadyRecorded();
 
         IACP.Job memory j = IACP(AGENTIC_COMMERCE).getJob(jobId);
-        require(j.client == msg.sender, "not job client");
+        if (j.client != msg.sender) revert NotJobClient();
 
         uint256 clientAgentId = agentIdByOperator[msg.sender];
-        require(clientAgentId != 0, "client not registered");
-        require(fee <= _agents[clientAgentId].evaluatorFeeMax, "fee exceeds max");
+        if (clientAgentId == 0) revert ClientNotRegistered();
+        if (fee > _agents[clientAgentId].evaluatorFeeMax) revert FeeExceedsMax();
 
         evaluatorFeeFor[jobId] = fee;
         jobFeeRecorded[jobId] = true;

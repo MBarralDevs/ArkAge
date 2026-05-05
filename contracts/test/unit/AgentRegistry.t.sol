@@ -40,7 +40,7 @@ contract AgentRegistryTest is Test {
 
     function test_registerAgent_revertsIfNotIdentityOwner() public {
         bytes32 policy = keccak256("policy-v1");
-        vm.expectRevert(bytes("not identity owner"));
+        vm.expectRevert(AgentRegistry.NotIdentityOwner.selector);
         registry.registerAgent(AGENT_ID, operator, policy, 1_000_000, 100_000);
     }
 
@@ -132,7 +132,7 @@ contract AgentRegistryTest is Test {
         });
         acp.setJob(jobId, j);
 
-        vm.expectRevert(bytes("not job client"));
+        vm.expectRevert(AgentRegistry.NotJobClient.selector);
         registry.recordJobFee(jobId, 50_000);
     }
 
@@ -161,7 +161,7 @@ contract AgentRegistryTest is Test {
         vm.prank(owner);
         registry.recordJobFee(jobId, 50_000);
 
-        vm.expectRevert(bytes("fee already recorded"));
+        vm.expectRevert(AgentRegistry.FeeAlreadyRecorded.selector);
         vm.prank(owner);
         registry.recordJobFee(jobId, 30_000);
     }
@@ -188,7 +188,7 @@ contract AgentRegistryTest is Test {
         vm.prank(owner);
         registry.registerAgent(99, owner, policy, 1_000_000, 100_000);
 
-        vm.expectRevert(bytes("fee exceeds max"));
+        vm.expectRevert(AgentRegistry.FeeExceedsMax.selector);
         vm.prank(owner);
         registry.recordJobFee(jobId, 200_000); // > 100_000 max
     }
@@ -196,7 +196,7 @@ contract AgentRegistryTest is Test {
     // ---- additional coverage: edge cases + uncovered functions ----
 
     function test_registerAgent_revertsOnZeroOperator() public {
-        vm.expectRevert(bytes("operator zero"));
+        vm.expectRevert(AgentRegistry.OperatorZero.selector);
         vm.prank(owner);
         registry.registerAgent(AGENT_ID, address(0), keccak256("p"), 1, 1);
     }
@@ -205,7 +205,7 @@ contract AgentRegistryTest is Test {
         vm.prank(owner);
         registry.registerAgent(AGENT_ID, operator, keccak256("p"), 1, 1);
 
-        vm.expectRevert(bytes("already registered"));
+        vm.expectRevert(AgentRegistry.AlreadyRegistered.selector);
         vm.prank(owner);
         registry.registerAgent(AGENT_ID, address(0xDEAD), keccak256("p2"), 2, 2);
     }
@@ -214,14 +214,14 @@ contract AgentRegistryTest is Test {
         vm.prank(owner);
         registry.registerAgent(AGENT_ID, operator, keccak256("p"), 1, 1);
 
-        vm.expectRevert(bytes("operator zero"));
+        vm.expectRevert(AgentRegistry.OperatorZero.selector);
         vm.prank(owner);
         registry.updateOperator(AGENT_ID, address(0));
     }
 
     function test_updateOperator_revertsIfNotRegistered() public {
         // AGENT_ID has owner but never registered; updating should fail.
-        vm.expectRevert(bytes("not registered"));
+        vm.expectRevert(AgentRegistry.NotRegistered.selector);
         vm.prank(owner);
         registry.updateOperator(AGENT_ID, address(0xCCCC));
     }
@@ -241,7 +241,7 @@ contract AgentRegistryTest is Test {
     }
 
     function test_updatePolicy_revertsIfNotRegistered() public {
-        vm.expectRevert(bytes("not registered"));
+        vm.expectRevert(AgentRegistry.NotRegistered.selector);
         vm.prank(owner);
         registry.updatePolicy(AGENT_ID, keccak256("p"), 1, 1);
     }
@@ -260,7 +260,7 @@ contract AgentRegistryTest is Test {
     }
 
     function test_reactivate_revertsIfNotRegistered() public {
-        vm.expectRevert(bytes("not registered"));
+        vm.expectRevert(AgentRegistry.NotRegistered.selector);
         vm.prank(owner);
         registry.reactivate(AGENT_ID);
     }
@@ -278,7 +278,7 @@ contract AgentRegistryTest is Test {
         uint256 malloryAgentId = 999;
         idReg.setOwner(malloryAgentId, mallory);
 
-        vm.expectRevert(bytes("operator already claimed"));
+        vm.expectRevert(AgentRegistry.OperatorAlreadyClaimed.selector);
         vm.prank(mallory);
         registry.registerAgent(malloryAgentId, operator, keccak256("hijack"), 1, 1);
     }
@@ -298,7 +298,7 @@ contract AgentRegistryTest is Test {
         registry.registerAgent(malloryAgentId, malloryTempOp, keccak256("p"), 1, 1);
 
         // Mallory tries to rotate her operator into Alice's slot — must revert.
-        vm.expectRevert(bytes("operator already claimed"));
+        vm.expectRevert(AgentRegistry.OperatorAlreadyClaimed.selector);
         vm.prank(mallory);
         registry.updateOperator(malloryAgentId, operator);
     }
@@ -326,7 +326,7 @@ contract AgentRegistryTest is Test {
 
         // strangerClient passes the j.client == msg.sender check but has
         // no registered agent, so the cap lookup fails.
-        vm.expectRevert(bytes("client not registered"));
+        vm.expectRevert(AgentRegistry.ClientNotRegistered.selector);
         vm.prank(strangerClient);
         registry.recordJobFee(jobId, 1);
     }

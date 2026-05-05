@@ -21,6 +21,10 @@ import {IAgentRegistry} from "./interfaces/IAgentRegistry.sol";
 ///         approved-operator of any 8004 NFT) trivially satisfies the rule.
 ///         Verified by test/invariant/HookOwnership.invariant.t.sol.
 contract ReputationHook is IACPHook {
+    // ---- Custom errors ----
+    error OnlyACP();
+
+    // ---- Immutable trust addresses ----
     address public immutable AGENTIC_COMMERCE;
     address public immutable REPUTATION_REGISTRY;
     address public immutable AGENT_REGISTRY;
@@ -45,7 +49,7 @@ contract ReputationHook is IACPHook {
     }
 
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata) external override {
-        require(msg.sender == AGENTIC_COMMERCE, "only ACP");
+        if (msg.sender != AGENTIC_COMMERCE) revert OnlyACP();
 
         // Only complete/reject can write reputation; bail early on other selectors
         // BEFORE checking idempotency so non-terminal hookable actions don't
