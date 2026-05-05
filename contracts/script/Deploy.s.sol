@@ -117,45 +117,62 @@ contract Deploy is Script {
         // but we additionally pin a stable, human-readable JSON consumed by
         // src/lib/addresses.ts at runtime.
         _writeDeployment(
-            block.chainid,
-            address(registry),
-            address(policyHook),
-            address(reputationHook),
-            address(feeHook),
-            address(composer),
-            treasury
+            DeploymentRecord({
+                chainId: block.chainid,
+                deployer: msg.sender,
+                registry: address(registry),
+                policyHook: address(policyHook),
+                reputationHook: address(reputationHook),
+                feeHook: address(feeHook),
+                composer: address(composer),
+                treasury: treasury
+            })
         );
     }
 
-    function _writeDeployment(
-        uint256 chainId,
-        address registry,
-        address policyHook,
-        address reputationHook,
-        address feeHook,
-        address composer,
-        address treasury
-    ) internal {
-        string memory json = string.concat(
+    struct DeploymentRecord {
+        uint256 chainId;
+        address deployer;
+        address registry;
+        address policyHook;
+        address reputationHook;
+        address feeHook;
+        address composer;
+        address treasury;
+    }
+
+    function _writeDeployment(DeploymentRecord memory r) internal {
+        // Schema matches Plan A Task 26 Step 2 exactly: top-level chainId,
+        // deployedAt, deployer, salt, contracts, canonical (+ treasury).
+        // Split into 3 chunks because string.concat over all fields hits
+        // EVM stack-depth limits.
+        string memory header = string.concat(
             "{\n",
-            '  "chainId": ', vm.toString(chainId), ",\n",
-            '  "salt": "', vm.toString(SALT), '",\n',
+            '  "chainId": ', vm.toString(r.chainId), ",\n",
+            '  "deployedAt": "', vm.toString(vm.unixTime()), '",\n',
+            '  "deployer": "', vm.toString(r.deployer), '",\n',
+            '  "salt": "', vm.toString(SALT), '",\n'
+        );
+        string memory contractsBlock = string.concat(
+            '  "contracts": {\n',
+            '    "AgentRegistry": "', vm.toString(r.registry), '",\n',
+            '    "PolicyHook": "', vm.toString(r.policyHook), '",\n',
+            '    "ReputationHook": "', vm.toString(r.reputationHook), '",\n',
+            '    "EvaluatorFeeHook": "', vm.toString(r.feeHook), '",\n',
+            '    "HookComposer": "', vm.toString(r.composer), '"\n',
+            "  },\n"
+        );
+        string memory canonicalBlock = string.concat(
             '  "canonical": {\n',
-            '    "agenticCommerce": "', vm.toString(AGENTIC_COMMERCE), '",\n',
-            '    "identityRegistry": "', vm.toString(IDENTITY_REGISTRY), '",\n',
-            '    "reputationRegistry": "', vm.toString(REPUTATION_REGISTRY), '",\n',
-            '    "usdc": "', vm.toString(USDC), '"\n',
+            '    "ERC_8183_AgenticCommerce": "', vm.toString(AGENTIC_COMMERCE), '",\n',
+            '    "ERC_8004_IdentityRegistry": "', vm.toString(IDENTITY_REGISTRY), '",\n',
+            '    "ERC_8004_ReputationRegistry": "', vm.toString(REPUTATION_REGISTRY), '",\n',
+            '    "USDC": "', vm.toString(USDC), '"\n',
             "  },\n",
-            '  "treasury": "', vm.toString(treasury), '",\n',
-            '  "arkage": {\n',
-            '    "agentRegistry": "', vm.toString(registry), '",\n',
-            '    "policyHook": "', vm.toString(policyHook), '",\n',
-            '    "reputationHook": "', vm.toString(reputationHook), '",\n',
-            '    "evaluatorFeeHook": "', vm.toString(feeHook), '",\n',
-            '    "hookComposer": "', vm.toString(composer), '"\n',
-            "  }\n",
+            '  "treasury": "', vm.toString(r.treasury), '"\n',
             "}\n"
         );
+        string memory json = string.concat(header, contractsBlock, canonicalBlock);
 
         string memory path = string.concat("deployments/arc-testnet.json");
         vm.writeFile(path, json);
