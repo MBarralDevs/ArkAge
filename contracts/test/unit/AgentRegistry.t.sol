@@ -265,6 +265,44 @@ contract AgentRegistryTest is Test {
         registry.reactivate(AGENT_ID);
     }
 
+    // ---- security regression: cross-agent operator hijack ----
+
+    function test_registerAgent_revertsIfOperatorAlreadyClaimed() public {
+        // Alice registers agent AGENT_ID with operator `operator`.
+        vm.prank(owner);
+        registry.registerAgent(AGENT_ID, operator, keccak256("p"), 1, 1);
+
+        // Mallory mints a separate identity and tries to claim Alice's
+        // operator address — must revert.
+        address mallory = address(0xDEAD);
+        uint256 malloryAgentId = 999;
+        idReg.setOwner(malloryAgentId, mallory);
+
+        vm.expectRevert(bytes("operator already claimed"));
+        vm.prank(mallory);
+        registry.registerAgent(malloryAgentId, operator, keccak256("hijack"), 1, 1);
+    }
+
+    function test_updateOperator_revertsIfTargetOperatorAlreadyClaimed() public {
+        // Alice has agent AGENT_ID with operator `operator`.
+        vm.prank(owner);
+        registry.registerAgent(AGENT_ID, operator, keccak256("p"), 1, 1);
+
+        // Mallory has her own agent + temp operator.
+        address mallory = address(0xDEAD);
+        address malloryTempOp = address(0xCAFE);
+        uint256 malloryAgentId = 999;
+        idReg.setOwner(malloryAgentId, mallory);
+
+        vm.prank(mallory);
+        registry.registerAgent(malloryAgentId, malloryTempOp, keccak256("p"), 1, 1);
+
+        // Mallory tries to rotate her operator into Alice's slot — must revert.
+        vm.expectRevert(bytes("operator already claimed"));
+        vm.prank(mallory);
+        registry.updateOperator(malloryAgentId, operator);
+    }
+
     function test_recordJobFee_revertsIfClientNotRegistered() public {
         // Job's client is a wallet that never registered as an operator.
         address strangerClient = address(0x9999);

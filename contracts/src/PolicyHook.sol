@@ -22,7 +22,7 @@ contract PolicyHook is IACPHook {
         AGENT_REGISTRY = agentRegistry;
     }
 
-    function beforeAction(uint256 jobId, bytes4 selector, bytes calldata data) external override {
+    function beforeAction(uint256 jobId, bytes4 selector, bytes calldata /* data */) external override {
         require(msg.sender == AGENTIC_COMMERCE, "only ACP");
 
         IACP.Job memory job = IACP(AGENTIC_COMMERCE).getJob(jobId);
@@ -37,9 +37,13 @@ contract PolicyHook is IACPHook {
 
         require(info.active, "policy: agent inactive");
 
+        // SECURITY: source the funded amount from the canonical Job state
+        // rather than the caller-supplied `data` blob. The previous version
+        // decoded `data` as the amount, which the caller could trivially
+        // zero-out to bypass the cap. job.budget is set by the provider via
+        // setBudget and is the actual amount being funded.
         if (selector == IACP.fund.selector) {
-            uint256 fundAmount = abi.decode(data, (uint256));
-            require(fundAmount <= info.perTxCap, "policy: per-tx cap");
+            require(job.budget <= info.perTxCap, "policy: per-tx cap");
         }
         // Additional selector-specific stateless gates can be added here.
     }

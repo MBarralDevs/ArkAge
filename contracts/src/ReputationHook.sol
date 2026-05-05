@@ -29,6 +29,11 @@ contract ReputationHook is IACPHook {
     string private constant TAG_COMPLETE = "outcome:complete";
     string private constant TAG_REJECT = "outcome:reject";
 
+    /// @notice Defense-in-depth idempotency: prevents double-write of reputation
+    ///         if ACP ever calls complete/reject twice for the same job (or a
+    ///         future ACP version supports retries).
+    mapping(uint256 => bool) private _processed;
+
     constructor(address acp, address reputationRegistry, address agentRegistry) {
         AGENTIC_COMMERCE = acp;
         REPUTATION_REGISTRY = reputationRegistry;
@@ -42,9 +47,22 @@ contract ReputationHook is IACPHook {
     function afterAction(uint256 jobId, bytes4 selector, bytes calldata) external override {
         require(msg.sender == AGENTIC_COMMERCE, "only ACP");
 
+        // Only complete/reject can write reputation; bail early on other selectors
+        // BEFORE checking idempotency so non-terminal hookable actions don't
+        // accidentally lock the jobId.
+        if (selector != IACP.complete.selector && selector != IACP.reject.selector) {
+            return;
+        }
+
+        // Idempotency: refuse to write reputation more than once per job.
+        if (_processed[jobId]) return;
+
         IACP.Job memory job = IACP(AGENTIC_COMMERCE).getJob(jobId);
         uint256 providerAgentId = IAgentRegistry(AGENT_REGISTRY).agentIdByOperator(job.provider);
         if (providerAgentId == 0) return; // unknown provider — silent skip (BYO flows)
+
+        // Mark as processed BEFORE the external call (CEI pattern).
+        _processed[jobId] = true;
 
         if (selector == IACP.complete.selector) {
             IReputationRegistry(REPUTATION_REGISTRY).giveFeedback(

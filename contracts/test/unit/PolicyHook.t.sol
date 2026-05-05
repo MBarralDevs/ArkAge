@@ -62,24 +62,39 @@ contract PolicyHookTest is Test {
     }
 
     function test_beforeAction_revertsOnFundExceedingPerTxCap() public {
-        // fund resolves actor → job.client; register operator under client field.
-        IACP.Job memory j = _job(address(0), 0);
+        // SECURITY-AUDIT FIX: cap is sourced from job.budget (canonical),
+        // not from caller-supplied `data`. Set budget > cap to trigger.
+        IACP.Job memory j = _job(address(0), 10_000_000); // > 5_000_000 cap
         j.client = operator;
         acp.setJob(1, j);
 
-        bytes memory data = abi.encode(uint256(10_000_000)); // > 5_000_000 cap
         vm.expectRevert(bytes("policy: per-tx cap"));
-        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, data);
+        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, "");
     }
 
     function test_beforeAction_passesWhenWithinPolicy() public {
-        IACP.Job memory j = _job(address(0), 0);
+        IACP.Job memory j = _job(address(0), 1_000_000); // <= 5_000_000 cap
         j.client = operator;
         acp.setJob(1, j);
 
-        bytes memory data = abi.encode(uint256(1_000_000));
-        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, data);
+        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, "");
         // should not revert
+    }
+
+    // ---- security regression: cap CANNOT be bypassed via crafted data ----
+
+    function test_beforeAction_capUsesJobBudgetNotCallerData() public {
+        // Job budget exceeds cap → must revert no matter what `data` claims.
+        IACP.Job memory j = _job(address(0), 10_000_000);
+        j.client = operator;
+        acp.setJob(1, j);
+
+        // Attacker tries to bypass by passing data = abi.encode(uint256(1)).
+        // Pre-fix this would have allowed; post-fix the cap check looks at
+        // job.budget (10M > 5M cap) and reverts regardless of data contents.
+        bytes memory maliciousData = abi.encode(uint256(1));
+        vm.expectRevert(bytes("policy: per-tx cap"));
+        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, maliciousData);
     }
 
     function test_afterAction_isNoOp() public {
@@ -93,13 +108,13 @@ contract PolicyHookTest is Test {
     function test_beforeAction_skipsIfActorNotRegistered() public {
         // Job's client is some random wallet that's NOT a registered ArkAge operator.
         // PolicyHook should silently allow (BYO evaluator / non-ArkAge agent flow).
-        IACP.Job memory j = _job(address(0), 0);
+        IACP.Job memory j = _job(address(0), 99_999_999_999); // huge budget
         j.client = address(0xDEAD);
         acp.setJob(1, j);
 
-        bytes memory data = abi.encode(uint256(99_999_999_999)); // huge — would fail cap if registered
-        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, data);
-        // no revert: unregistered actor bypasses gate entirely
+        // Even with a huge budget exceeding any reasonable cap, an unregistered
+        // actor bypasses the gate entirely — that's by design for BYO flows.
+        acp.callBeforeAction(address(hook), 1, IACP.fund.selector, "");
     }
 
     function test_beforeAction_setBudget_resolvesProviderActor() public {

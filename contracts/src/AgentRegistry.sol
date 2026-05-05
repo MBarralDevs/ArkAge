@@ -57,6 +57,12 @@ contract AgentRegistry is IAgentRegistry {
     {
         require(_agents[agentId].operatorWallet == address(0), "already registered");
         require(op != address(0), "operator zero");
+        // SECURITY: prevent cross-agent operator hijack. Without this guard, an
+        // attacker who owns any cheap 8004 identity could claim another agent's
+        // operator address and DoS or reroute their on-chain calls through
+        // PolicyHook. The previous identity owner must vacate the slot first
+        // via updateOperator before another agent can claim it.
+        require(agentIdByOperator[op] == 0, "operator already claimed");
         _agents[agentId] = AgentInfo({
             operatorWallet: op,
             currentPolicyHash: policy,
@@ -72,6 +78,9 @@ contract AgentRegistry is IAgentRegistry {
         require(op != address(0), "operator zero");
         address prev = _agents[agentId].operatorWallet;
         require(prev != address(0), "not registered");
+        // SECURITY: same hijack guard as registerAgent — prevents one identity
+        // from rotating into another agent's operator slot.
+        require(agentIdByOperator[op] == 0, "operator already claimed");
         agentIdByOperator[prev] = 0;
         _agents[agentId].operatorWallet = op;
         agentIdByOperator[op] = agentId;

@@ -120,4 +120,27 @@ contract ReputationHookTest is Test {
         acp.callAfterAction(address(hook), 0, IACP.complete.selector, "");
         assertEq(repReg.callsLength(), 1);
     }
+
+    // ---- security regression: idempotency on double-complete/reject ----
+
+    function test_afterAction_idempotency_secondCompleteIsNoOp() public {
+        acp.setJob(1, _job());
+        acp.callAfterAction(address(hook), 1, IACP.complete.selector, "");
+        assertEq(repReg.callsLength(), 1);
+
+        // Second call (e.g. ACP retry) must not double-write reputation.
+        acp.callAfterAction(address(hook), 1, IACP.complete.selector, "");
+        assertEq(repReg.callsLength(), 1, "idempotency violated");
+    }
+
+    function test_afterAction_idempotency_rejectAfterCompleteIsNoOp() public {
+        // If a job somehow received both complete and reject (defensive),
+        // the second write must not occur.
+        acp.setJob(1, _job());
+        acp.callAfterAction(address(hook), 1, IACP.complete.selector, "");
+        assertEq(repReg.callsLength(), 1);
+
+        acp.callAfterAction(address(hook), 1, IACP.reject.selector, "");
+        assertEq(repReg.callsLength(), 1, "idempotency violated");
+    }
 }
