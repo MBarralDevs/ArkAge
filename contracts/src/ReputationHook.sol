@@ -46,11 +46,12 @@ contract ReputationHook is IACPHook {
     ///         future ACP version supports retries).
     mapping(uint256 => bool) private _processed;
 
-    constructor(address acp, address reputationRegistry, address agentRegistry) {
+    constructor(address acp, address reputationRegistry, address agentRegistry, address initializer) {
         AGENTIC_COMMERCE = acp;
         REPUTATION_REGISTRY = reputationRegistry;
         AGENT_REGISTRY = agentRegistry;
-        INITIALIZER = msg.sender;
+        // Explicit initializer rather than msg.sender — see PolicyHook for rationale.
+        INITIALIZER = initializer;
     }
 
     function setTrustedCaller(address caller) external {

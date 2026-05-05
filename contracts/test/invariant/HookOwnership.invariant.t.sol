@@ -46,9 +46,9 @@ contract HookOwnershipInvariantTest is Test {
         MockUSDC usdc = new MockUSDC();
 
         registry = new AgentRegistry(address(idReg), address(acp));
-        policyHook = new PolicyHook(address(acp), address(registry));
-        reputationHook = new ReputationHook(address(acp), address(rep), address(registry));
-        feeHook = new EvaluatorFeeHook(address(acp), address(usdc), address(0xDEAD), address(registry));
+        policyHook = new PolicyHook(address(acp), address(registry), address(this));
+        reputationHook = new ReputationHook(address(acp), address(rep), address(registry), address(this));
+        feeHook = new EvaluatorFeeHook(address(acp), address(usdc), address(0xDEAD), address(registry), address(this));
 
         address[] memory before_ = new address[](1);
         before_[0] = address(policyHook);

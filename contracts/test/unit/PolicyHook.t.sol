@@ -22,7 +22,7 @@ contract PolicyHookTest is Test {
         idReg = new MockIdentityRegistry();
         acp = new MockACP();
         registry = new AgentRegistry(address(idReg), address(acp));
-        hook = new PolicyHook(address(acp), address(registry));
+        hook = new PolicyHook(address(acp), address(registry), address(this));
 
         idReg.setOwner(AGENT_ID, owner);
         vm.prank(owner);

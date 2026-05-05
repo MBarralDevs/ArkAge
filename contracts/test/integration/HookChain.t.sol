@@ -54,9 +54,9 @@ contract HookChainTest is Test {
 
         // ---- All 5 ArkAge contracts ----
         registry = new AgentRegistry(address(idReg), address(acp));
-        policyHook = new PolicyHook(address(acp), address(registry));
-        reputationHook = new ReputationHook(address(acp), address(repReg), address(registry));
-        feeHook = new EvaluatorFeeHook(address(acp), address(usdc), treasury, address(registry));
+        policyHook = new PolicyHook(address(acp), address(registry), address(this));
+        reputationHook = new ReputationHook(address(acp), address(repReg), address(registry), address(this));
+        feeHook = new EvaluatorFeeHook(address(acp), address(usdc), treasury, address(registry), address(this));
 
         address[] memory before_ = new address[](1);
         before_[0] = address(policyHook);

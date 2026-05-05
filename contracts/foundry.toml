@@ -12,6 +12,9 @@ via_ir = false
 verbosity = 2
 fuzz = { runs = 256 }
 invariant = { runs = 64, depth = 32, fail_on_revert = false }
+# Allow the deploy script to persist a stable JSON artifact at
+# contracts/deployments/arc-testnet.json (consumed by src/lib/addresses.ts).
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
 
 [profile.default.fmt]
 line_length = 110

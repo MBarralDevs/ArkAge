@@ -34,10 +34,14 @@ contract PolicyHook is IACPHook {
     ///         and in BYO scenarios where the ACP calls the hook directly.
     address public trustedCaller;
 
-    constructor(address acp, address agentRegistry) {
+    constructor(address acp, address agentRegistry, address initializer) {
         AGENTIC_COMMERCE = acp;
         AGENT_REGISTRY = agentRegistry;
-        INITIALIZER = msg.sender;
+        // Explicit initializer rather than msg.sender — necessary for CREATE2
+        // deployment paths (e.g. broadcast through the canonical CREATE2
+        // factory), where msg.sender at construction is the factory, not the
+        // EOA that should retain post-deploy admin authority.
+        INITIALIZER = initializer;
     }
 
     function setTrustedCaller(address caller) external {

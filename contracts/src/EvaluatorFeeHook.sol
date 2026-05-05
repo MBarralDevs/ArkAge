@@ -46,12 +46,19 @@ contract EvaluatorFeeHook is IACPHook {
 
     event FeeCollected(uint256 indexed jobId, address indexed provider, uint256 amount);
 
-    constructor(address acp, address usdc, address treasury, address agentRegistry) {
+    constructor(
+        address acp,
+        address usdc,
+        address treasury,
+        address agentRegistry,
+        address initializer
+    ) {
         AGENTIC_COMMERCE = acp;
         USDC = usdc;
         TREASURY = treasury;
         AGENT_REGISTRY = agentRegistry;
-        INITIALIZER = msg.sender;
+        // Explicit initializer rather than msg.sender — see PolicyHook for rationale.
+        INITIALIZER = initializer;
     }
 
     function setTrustedCaller(address caller) external {

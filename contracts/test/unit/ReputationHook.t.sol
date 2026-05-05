@@ -27,7 +27,7 @@ contract ReputationHookTest is Test {
         acp = new MockACP();
         repReg = new MockReputationRegistry();
         registry = new AgentRegistry(address(idReg), address(acp));
-        hook = new ReputationHook(address(acp), address(repReg), address(registry));
+        hook = new ReputationHook(address(acp), address(repReg), address(registry), address(this));
 
         idReg.setOwner(PROVIDER_AGENT_ID, owner);
         vm.prank(owner);

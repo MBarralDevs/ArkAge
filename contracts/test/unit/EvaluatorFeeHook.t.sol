@@ -28,7 +28,7 @@ contract EvaluatorFeeHookTest is Test {
         acp = new MockACP();
         usdc = new MockUSDC();
         registry = new AgentRegistry(address(idReg), address(acp));
-        hook = new EvaluatorFeeHook(address(acp), address(usdc), treasury, address(registry));
+        hook = new EvaluatorFeeHook(address(acp), address(usdc), treasury, address(registry), address(this));
 
         // Register client agent
         idReg.setOwner(CLIENT_AGENT_ID, owner);
