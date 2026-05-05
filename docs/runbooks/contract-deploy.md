@@ -21,84 +21,90 @@ deploy that needs to be re-run from scratch.
 
 ---
 
-## Step 1 — Provision Tier 3 wallets in Circle Console
+## Step 1 — Provision Tier 3 wallets via the bootstrap script
 
-You need three Developer-Controlled Wallets (DCW) in **EOA mode** on
-Arc Testnet. EOA mode is mandatory (LBC-1 in spec §5) — Circle Gateway
-nanopayments verify via `ecrecover`, which doesn't work for smart-account
-wallets.
+Circle's Console UI no longer exposes wallet/wallet-set/entity-secret
+creation — those are now SDK-only. We have a one-shot script that does
+the whole thing.
 
-### 1a. One-time Circle Console setup
+### Architecture note: why a throwaway deployer EOA?
 
-The first time you create developer-controlled wallets, Circle requires you
-to register an **entity secret**:
+Circle Developer-Controlled Wallets use 2-of-2 MPC; the private key is
+sharded between Circle and you and **cannot be exported**. Foundry's
+`forge script --private-key` flow needs a raw key. So for the testnet
+bootstrap we provision **4** wallets:
 
-1. Sign in at <https://console.circle.com>
-2. Top-right profile menu → **API & Client Keys** (or sidebar **Configurator
-   → Entity Secret**, depending on the console version)
-3. Click **Generate Entity Secret** → save the resulting hex string locally
-   (you'll never see it again)
-4. Click **Encrypt Entity Secret** → upload the public key Circle provides,
-   get back a **ciphertext**
-5. Click **Register Ciphertext** → paste the ciphertext
+| Wallet | Implementation | Lifetime |
+|---|---|---|
+| `arkage:treasury` | Circle DCW EOA on `ARC-TESTNET` | Long-lived (runtime fees) |
+| `arkage:validator` | Circle DCW EOA on `ARC-TESTNET` | Long-lived (Plan B runtime) |
+| `arkage:gas-funder` | Circle DCW EOA on `ARC-TESTNET` | Long-lived (runtime gas top-ups) |
+| `deployer` | **Throwaway** raw EOA, generated locally | One-shot — discarded after Plan A |
 
-You only do this once per Circle account.
+Mainnet uses Circle's deploy infrastructure instead — never raw keys.
+See CLAUDE.md "PRIVATE_KEY is testnet-only".
 
-### 1b. Create a Wallet Set
+### 1a. Make sure your API key is in `.env.local`
 
-Wallets live inside a **Wallet Set** — the logical grouping. From the
-console:
+```dotenv
+CIRCLE_API_KEY=…                  # from Circle Console → API & Client Keys
+```
 
-1. Sidebar **Developer Services → Wallets** (or top-level **Wallets** in
-   newer UIs)
-2. Click **Create Wallet Set**
-3. Type: **Developer-Controlled**
-4. Name: `arkage-testnet-system`
-5. Save
+If you've never registered an entity secret on this Circle account before,
+leave `CIRCLE_ENTITY_SECRET=` empty — the script will generate + register
+one on first run.
 
-### 1c. Create the three wallets
+### 1b. Run the bootstrap script
 
-Inside the wallet set, click **Create Wallet** three times:
+```bash
+npm run bootstrap:tier3
+```
 
-| Name | Blockchain | Account type |
-|------|------------|--------------|
-| `arkage:treasury`   | Arc Testnet (`ARC-SEPOLIA` / chain id 5042002) | EOA |
-| `arkage:validator`  | Arc Testnet | EOA |
-| `arkage:gas-funder` | Arc Testnet | EOA |
+The script:
 
-> **Console name confusion:** depending on UI version, Arc Testnet may show
-> as `ARC-SEPOLIA`, `ARC-TESTNET`, or `Arc (Testnet)`. The chain id is the
-> source of truth — `5042002` (decimal) / `0x4CEF52` (hex).
+1. Generates a 32-byte entity secret (if `CIRCLE_ENTITY_SECRET` is unset)
+   and registers it with Circle. Recovery file lands in `.secrets/`
+   (gitignored) — back this file up to a password manager.
+2. Creates wallet set `arkage-testnet-system`.
+3. Creates three EOA wallets on `ARC-TESTNET`: treasury, validator,
+   gas-funder.
+4. Generates a throwaway deployer EOA locally with viem.
+5. Prints all four addresses + the deployer private key (+ entity secret
+   on first run) ready to paste into `.env.local`.
 
-Copy each wallet's address.
-
-### 1d. Fund the gas-funder
-
-1. Open <https://faucet.circle.com>
-2. Select **Arc Testnet**
-3. Paste the gas-funder address
-4. Request USDC (Arc gas is paid in USDC — the faucet handles this)
-
-A few USDC is plenty — the deploy itself burns < 1 USDC of gas.
-
-### 1e. Export the gas-funder private key
-
-In Circle Console, open the gas-funder wallet → **Settings** or
-**Advanced** → **Export Private Key** → copy the hex value.
-
-> If your console version doesn't surface a one-click export, you can derive
-> it from the entity secret + wallet metadata via the Circle SDK. See the
-> "Programmatic export" section at the bottom of this runbook.
-
-### 1f. Populate `.env.local` (do NOT commit)
+### 1c. Paste the printed lines into `.env.local`
 
 ```dotenv
 ARKAGE_TREASURY_WALLET_ADDRESS=0x…
 ARKAGE_VALIDATOR_WALLET_ADDRESS=0x…
 ARKAGE_GAS_FUNDER_WALLET_ADDRESS=0x…
 PRIVATE_KEY=0x…
+CIRCLE_ENTITY_SECRET=…            # only on first run
 ARCSCAN_API_KEY=                  # only if Blockscout requires it; usually empty is fine
 ```
+
+### 1d. Fund the deployer at the faucet
+
+1. Open <https://faucet.circle.com>
+2. Select **Arc Testnet**
+3. Paste the **deployer address** (printed by the script as
+   `# deployer address: 0x…`)
+4. Request USDC — Arc gas is paid in USDC; a few USDC is plenty
+   (deploy burns < 1 USDC of gas)
+
+The 3 Circle DCWs do **not** need funding for Plan A — they're used by
+later plans at runtime.
+
+### 1e. Back up the recovery file off-machine
+
+```bash
+ls .secrets/
+# recovery_file_<timestamp>.dat
+```
+
+Copy the contents into your password manager. Losing both the entity
+secret and the recovery file = permanent Circle account lockout, no
+recovery path.
 
 ---
 
@@ -237,27 +243,18 @@ git push origin main --tags
 
 ---
 
-## Programmatic export (fallback for Step 1e)
+## Re-provisioning Tier 3 wallets (rare)
 
-If the Circle Console UI doesn't offer a one-click "export private key"
-button for DCW EOA wallets, you can fetch it via the Circle SDK using your
-entity secret:
+If you need to re-create the 3 Circle DCWs (e.g. moving to a different
+Circle account, or rotating wallets after a security incident), you can
+re-run `npm run bootstrap:tier3`. Notes:
 
-```ts
-// scripts/export-wallet-pk.ts (run with: npx tsx scripts/export-wallet-pk.ts)
-import { initiateDeveloperControlledWalletsClient } from '@circle-fin/developer-controlled-wallets';
-
-const client = initiateDeveloperControlledWalletsClient({
-  apiKey: process.env.CIRCLE_API_KEY!,
-  entitySecret: process.env.CIRCLE_ENTITY_SECRET!,
-});
-
-const { data } = await client.getWalletKey({
-  id: process.env.GAS_FUNDER_WALLET_ID!, // from Circle Console
-});
-
-console.log(data?.privateKey);
-```
-
-This script is **not** committed to the repo — write it locally in a
-gitignored scratch directory if you need it. Delete after use.
+- If `CIRCLE_ENTITY_SECRET` is already set, the script reuses it and skips
+  re-registration. To rotate the entity secret too, clear it from
+  `.env.local` first — but be aware **rotating invalidates all existing
+  wallets created under the old secret** (they become unsignable).
+- The script always creates a fresh wallet set, so the wallets get new
+  addresses. Update `.env.local` and re-deploy contracts if needed.
+- If wallets already exist on the Circle side and you just want to re-list
+  them rather than create new ones, use `client.listWallets({ walletSetId })`
+  via a one-off script — not currently part of the bootstrap.

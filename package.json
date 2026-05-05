@@ -18,7 +18,8 @@
     "db:reset": "dotenv -e .env.local -- prisma migrate reset",
     "db:seed": "dotenv -e .env.local -- prisma db seed",
     "db:studio": "dotenv -e .env.local -- prisma studio",
-    "db:format": "dotenv -e .env.local -- prisma format"
+    "db:format": "dotenv -e .env.local -- prisma format",
+    "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -31,6 +32,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
     "@types/react": "^19",

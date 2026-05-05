@@ -64,3 +64,7 @@ prisma/migrations/dev.db-journal
 *.key
 secrets/
 .secrets/
+# Circle DCW recovery files (contain encrypted entity secret;
+# losing them locks you out of the account)
+recovery_file_*.dat
+*.recovery
