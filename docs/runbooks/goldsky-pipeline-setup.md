@@ -14,16 +14,39 @@ shapes.
 2. Install the CLI and log in:
    ```bash
    npm install -g @goldskycom/cli
-   goldsky login
+   goldsky login        # prompts for an API token from app.goldsky.com → Settings
    ```
-3. Set the Postgres secret (uses your `DATABASE_URL` from `.env.local`):
+3. Create the Postgres secret. **Goldsky uses a JDBC-shaped secret schema with
+   broken-out fields** — *not* a single connection-string blob. Use the
+   `DIRECT_DATABASE_URL` (not the pooled connection — pipeline write requires
+   DDL rights to create the `indexer_raw` schema):
    ```bash
-   goldsky secret create NEON_POSTGRES "$DATABASE_URL"
+   DIRECT_URL="$(grep '^DIRECT_DATABASE_URL=' .env.local | cut -d= -f2-)"
+   VALUE_JSON=$(python3 -c "
+   import json, urllib.parse
+   p = urllib.parse.urlparse('$DIRECT_URL')
+   print(json.dumps({
+       'type': 'jdbc',
+       'protocol': 'postgres',
+       'host': p.hostname,
+       'port': p.port or 5432,
+       'databaseName': p.path.lstrip('/'),
+       'user': p.username,
+       'password': p.password,
+       'ssl': True,
+   }))")
+   goldsky secret create --name NEON_POSTGRES --value "$VALUE_JSON"
    ```
 4. Apply the pipeline:
    ```bash
    goldsky pipeline apply indexer/goldsky/arkage-canonical.yaml
    ```
+
+> **Naming gotcha** that bit me on first run: Goldsky uses **hyphenated chain
+> slugs** in the docs (`arc-testnet`) but **underscored dataset names** in
+> Mirror pipelines (`arc_testnet.raw_logs`). The dataset is also versioned —
+> `version: 1.0.0` is required. The YAML in this directory has the right
+> values; don't paraphrase the pinned dataset name.
 
 ## Verifying events flow
 
