@@ -68,3 +68,4 @@ secrets/
 # losing them locks you out of the account)
 recovery_file_*.dat
 *.recovery
+.vercel
