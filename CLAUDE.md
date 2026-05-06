@@ -334,6 +334,7 @@ The Vercel Plugin's post-tool-use validator pattern-matches `setTimeout`/`setInt
 - **Formal contract verification** (Certora / Halmos) — pre-significant TVL
 - **Mainnet migration plan** — once Arc opens mainnet
 - **`arkage:update_x402_endpoint_price` MCP tool** — small UX gap from v1
+- **`arkage:topup_via_testmint` MCP tool + workflow step** — auto-tops up registered agents from `https://testmint.myproceeds.xyz` (x402-protocol agent faucet on Arc Testnet) when their balance dips below a threshold. Eliminates manual faucet visits during testnet life. Doubles as a real-world x402 endpoint we can register and exercise via Plan D's facilitator overlay.
 
 ---
 
