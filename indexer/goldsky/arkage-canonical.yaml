@@ -1,0 +1,22 @@
+name: arkage-canonical
+apiVersion: 3
+sources:
+  erc_8183_jobs:
+    type: dataset
+    dataset_name: arc-testnet.logs
+    filter: "address = '0x0747eef0706327138c69792bf28cd525089e4583'"
+    start_block: 0
+  erc_8004_reputation:
+    type: dataset
+    dataset_name: arc-testnet.logs
+    filter: "address IN ('0x8004a818bfb912233c491871b3d84c89a494bd9e','0x8004b663056a597dffe9eccc1965a193b7388713','0x8004cb1bf31daf7788923b405b754f57aceb4272')"
+    start_block: 0
+sinks:
+  postgres:
+    type: postgres
+    table: raw_chain_logs
+    secret_name: NEON_POSTGRES
+    schema: indexer_raw
+    description: |
+      Raw event log dump from canonical Arc contracts. The webhook
+      ingest worker normalizes these into job_events / reputation_feedback.
