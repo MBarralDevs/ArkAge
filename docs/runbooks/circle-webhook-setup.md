@@ -38,13 +38,27 @@ subscribed to **all** events. (Filtering is handled at the receiver in
 In Circle Console → **Webhooks**:
 
 1. Click **Create webhook**
-2. **Endpoint URL**: `https://<your-vercel-deployment-url>/api/webhooks/circle`
+2. **Category**: pick **Smart Contract Platform**
+3. **Endpoint URL**: `https://<your-vercel-deployment-url>/api/webhooks/circle`
    - For local development, use a tunnel (ngrok / cloudflared) and update
      the URL when promoting to production.
-3. Generate a **webhook secret**. Save it as `CIRCLE_WEBHOOK_SECRET`
-   in `.env.local` and in Vercel's environment variables (production
-   + preview).
-4. **Subscribe** the webhook to all 5 contracts' event monitors.
+
+> **No shared secret needed.** Circle Web3 Services webhooks (Smart
+> Contract Platform included) are signed with **ECDSA-SHA256 + a public
+> key fetched from Circle's API**. The receiver reads `X-Circle-Key-Id`,
+> calls `GET /v2/notifications/publicKey/{keyId}` (Bearer auth via
+> `CIRCLE_API_KEY`), caches the key, then verifies. There is no shared
+> secret to copy from the console — `CIRCLE_API_KEY` alone is enough.
+
+4. **Subscribe** the webhook to all event monitors created in step 2.
+
+### 4. Activate the webhook
+
+Circle activates the webhook by sending a `webhooks.test` notification
+(an ECDSA-signed POST). If the receiver verifies + returns 200, the
+webhook flips to **Active**. If it fails (e.g. signature mismatch,
+public-key fetch error), the console will show **NON 2XX**; click
+**Retry connection** after fixing the issue server-side.
 
 ### 4. Verify with the smoke test
 
