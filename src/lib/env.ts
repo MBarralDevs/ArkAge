@@ -10,9 +10,11 @@ const envSchema = z.object({
   DIRECT_DATABASE_URL: z.string().url().optional(),
 
   // Circle (DCW + webhook)
+  // Note: no CIRCLE_WEBHOOK_SECRET — Circle Web3 Services webhooks are
+  // signed with ECDSA against a public key fetched via CIRCLE_API_KEY,
+  // not HMAC against a shared secret. See src/lib/circle-webhook-verify.ts.
   CIRCLE_API_KEY: z.string().min(1),
   CIRCLE_ENTITY_SECRET: z.string().min(1),
-  CIRCLE_WEBHOOK_SECRET: z.string().min(1),
 
   // Goldsky (optional in dev — not required until Plan A Task 27)
   GOLDSKY_PROJECT_ID: z.string().min(1).optional(),
