@@ -69,3 +69,7 @@ secrets/
 recovery_file_*.dat
 *.recovery
 .vercel
+
+# Vercel Workflow DevKit local test artifacts
+.workflow-data/
+.workflow-vitest/
