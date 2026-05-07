@@ -22,6 +22,9 @@
     "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts"
   },
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.3.1",
+    "@circle-fin/modular-wallets-core": "^1.0.13",
+    "@circle-fin/x402-batching": "^3.0.4",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
@@ -33,7 +36,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@circle-fin/developer-controlled-wallets": "^10.3.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^24",
     "@types/react": "^19",
