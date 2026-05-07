@@ -16,14 +16,10 @@ import { loadAgentByDbId } from "@/lib/agent-loader";
  *
  * Routing: gates via off-chain policy + wallet router (must be Tier 2).
  * Signs ERC8183.createJob via Tier 2 DCW. Returns the queued Circle
- * transaction reference; the indexer + Goldsky pipeline pick up the
- * JobCreated event, hydrate the Postgres `jobs` row, and a future
- * jobLifecycle workflow run advances from there.
- *
- * NOTE: spawning the jobLifecycle workflow is deferred until Phase 8/9
- * builds the workflow. The MCP layer just records the post; the
- * stuck-workflow reconciler picks up the slack until the workflow is
- * live (and at that point we'll add the workflow start here).
+ * transaction reference; the on-chain `jobId` is not known until the
+ * tx confirms and Goldsky surfaces the JobCreated event, so the
+ * jobLifecycle workflow is spawned from the ingest worker (Plan B
+ * Tasks 31-32), not here.
  */
 
 const Input = z.object({

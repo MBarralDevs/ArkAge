@@ -12,6 +12,8 @@ import {
 } from "./lib/recording-steps";
 import { tryClaimRefund } from "./lib/settlement-steps";
 import { db } from "@/lib/db";
+import { start } from "workflow/api";
+import { llmEvaluatorAgent } from "./llm-evaluator-agent";
 
 /**
  * jobLifecycle — the spine of every ERC-8183 job ArkAge orchestrates.
@@ -60,20 +62,21 @@ async function loadJobTier(
     return tier ?? "standard";
 }
 
-// llmEvaluatorAgent spawn is intentionally NOT imported here. Phase 10
-// (Task 28) lands the agent and adds the `start(...)` call. Until then,
-// jobLifecycle skips the spawn — the chain still progresses via
-// whoever's holding the evaluator role (in early testnet runs, that's
-// us via cast send through the Tier 3 validator, manually).
+// `start` from workflow/api is a no-op stub when imported inside a workflow
+// body, so the spawn must run in a step context. The child Run is fire-and-
+// forget — its terminal state propagates back via `jobTerminalToken` which
+// llmEvaluatorAgent fires after on-chain settlement (parent Phase 4 awaits it).
 async function startEvaluatorChild(
     jobId: bigint,
     tier: "fast" | "standard" | "premium",
-): Promise<{ skipped: true; reason: string }> {
+): Promise<{ runId: string }> {
     "use step";
+    console.log(`[jobLifecycle] startEvaluatorChild jobId=${jobId} tier=${tier}`);
+    const run = await start(llmEvaluatorAgent, [jobId, tier]);
     console.log(
-        `[jobLifecycle] startEvaluatorChild SKIPPED jobId=${jobId} tier=${tier} (Phase 10 not yet wired)`,
+        `[jobLifecycle] startEvaluatorChild spawned jobId=${jobId} runId=${run.runId}`,
     );
-    return { skipped: true, reason: "llmEvaluatorAgent not yet implemented" };
+    return { runId: run.runId };
 }
 
 // --- Workflow body ---

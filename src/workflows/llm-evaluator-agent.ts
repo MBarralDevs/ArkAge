@@ -1,0 +1,243 @@
+import { DurableAgent } from "@workflow/ai/agent";
+import { getWritable } from "workflow";
+import { resumeHook } from "workflow/api";
+import { stepCountIs, type UIMessageChunk, type ModelMessage } from "ai";
+import { keccak256, toHex } from "viem";
+import { db } from "@/lib/db";
+import { readJob } from "@/lib/erc8183-state";
+import { persistEvidence, type EvidenceRecord } from "@/lib/evidence-store";
+import { callComplete, callReject } from "./lib/settlement-steps";
+import { evaluatorDoneToken, jobTerminalToken } from "./lib/hook-tokens";
+import {
+    EVALUATOR_PROMPT_VERSION,
+    EVALUATOR_SYSTEM_PROMPT,
+    buildEvaluationPrompt,
+    modelForTier,
+    type EvaluatorTier,
+} from "./lib/evaluator-prompts";
+import {
+    recordWorkflowStart,
+    recordWorkflowComplete,
+} from "./lib/recording-steps";
+
+/**
+ * llmEvaluatorAgent — tier-selected Claude model evaluates a deliverable.
+ *
+ * Spawned by `jobLifecycle` Phase 3 when ArkAge is the registered evaluator
+ * (Plan B Task 27 stubbed the spawn; this commit lands the agent itself).
+ *
+ * 1. loadJobContext + fetchDeliverable (steps; durable, retryable)
+ * 2. DurableAgent streams reasoning to namespace "evaluator:reasoning"
+ *    (Plan C will subscribe via SSE for live dashboard rendering)
+ * 3. persistEvaluation writes Vercel Blob + jobEvaluation row, returning
+ *    the keccak256 evidenceHash that threads through ERC-8183 reason
+ *    and ERC-8004 feedbackHash (the cryptographic link required by spec)
+ * 4. Settle on-chain via Tier 3 validator wallet (callComplete | callReject)
+ * 5. Fire evaluator:done + JobTerminal hooks so jobLifecycle resumes Phase 4
+ *
+ * Model IDs flow through AI Gateway — `anthropic/claude-haiku-4.5`,
+ * `claude-sonnet-4.6`, `claude-opus-4.7` per `evaluator-prompts.ts`.
+ */
+
+interface EvaluatorOutput {
+    verdict: "accept" | "reject";
+    score: number;
+    reasoning: string;
+    concerns: string[];
+}
+
+async function loadJobContext(
+    jobId: bigint,
+): Promise<{ description: string; budget: bigint; deliverableHash: string }> {
+    "use step";
+    console.log(`[evaluator] loadJobContext jobId=${jobId}`);
+    const job = await readJob(jobId);
+    const dbJob = await db.job.findUnique({ where: { jobId: jobId.toString() } });
+    const description = dbJob?.descriptionUri ?? "(no description URI)";
+    return { description, budget: job.budget, deliverableHash: job.reason };
+}
+
+async function fetchDeliverable(deliverableHash: string): Promise<string> {
+    "use step";
+    console.log(`[evaluator] fetchDeliverable hash=${deliverableHash}`);
+    const base =
+        process.env.ARKAGE_DELIVERABLE_GATEWAY ??
+        "https://arkage.network/api/deliverables/";
+    const url = `${base}${deliverableHash}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+        console.log(`[evaluator] fetchDeliverable failed status=${res.status}`);
+        return `(deliverable unavailable: ${res.status})`;
+    }
+    return await res.text();
+}
+
+async function persistEvaluation(args: {
+    jobId: bigint;
+    tier: EvaluatorTier;
+    model: string;
+    output: EvaluatorOutput;
+    deliverableHash: string;
+    inputTokens: number;
+    outputTokens: number;
+}): Promise<{ evidenceUri: string; evidenceHash: `0x${string}` }> {
+    "use step";
+    console.log(
+        `[evaluator] persistEvaluation jobId=${args.jobId} verdict=${args.output.verdict}`,
+    );
+    const promptHash = keccak256(toHex(EVALUATOR_SYSTEM_PROMPT));
+    const record: EvidenceRecord = {
+        model: args.model,
+        verdict: args.output.verdict,
+        reasoning: args.output.reasoning,
+        deliverableHash: args.deliverableHash,
+        inputTokens: args.inputTokens,
+        outputTokens: args.outputTokens,
+        promptVersion: EVALUATOR_PROMPT_VERSION,
+        promptHash,
+        structuredResponse: args.output,
+    };
+    const { uri, hash } = await persistEvidence(args.jobId, record);
+
+    const job = await db.job.findUnique({
+        where: { jobId: args.jobId.toString() },
+    });
+    if (!job) throw new Error(`job ${args.jobId} not found in db`);
+
+    await db.jobEvaluation.create({
+        data: {
+            jobId: job.id,
+            workflowRunId: "pending",
+            model: args.model,
+            tier: args.tier,
+            inputTokens: args.inputTokens,
+            outputTokens: args.outputTokens,
+            promptVersion: EVALUATOR_PROMPT_VERSION,
+            promptHash: Buffer.from(promptHash.replace(/^0x/, ""), "hex"),
+            deliverableHash: Buffer.from(
+                args.deliverableHash.replace(/^0x/, ""),
+                "hex",
+            ),
+            reasoningText: args.output.reasoning,
+            structuredResponseJsonb: args.output as object,
+            verdict: args.output.verdict,
+            score: args.output.score,
+            evidenceUri: uri,
+            evidenceHash: Buffer.from(hash.replace(/^0x/, ""), "hex"),
+        },
+    });
+
+    return { evidenceUri: uri, evidenceHash: hash };
+}
+
+// resumeHook from `workflow/api` is a no-op stub when imported inside a
+// workflow body (the `workflow` package-export condition). Wrap each call
+// in a step so the real implementation runs from a step context.
+async function fireEvaluatorDoneHook(
+    jobId: bigint,
+    payload: { verdict: "accept" | "reject"; evidenceHash: `0x${string}` },
+): Promise<void> {
+    "use step";
+    console.log(
+        `[evaluator] fireEvaluatorDoneHook jobId=${jobId} verdict=${payload.verdict}`,
+    );
+    await resumeHook(evaluatorDoneToken(jobId), payload);
+}
+
+async function fireJobTerminalHook(
+    jobId: bigint,
+    status: "Completed" | "Rejected",
+): Promise<void> {
+    "use step";
+    console.log(`[evaluator] fireJobTerminalHook jobId=${jobId} status=${status}`);
+    await resumeHook(jobTerminalToken(jobId), { status });
+}
+
+function extractAssistantText(messages: ModelMessage[]): string {
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (!m || m.role !== "assistant") continue;
+        if (typeof m.content === "string") return m.content;
+        if (Array.isArray(m.content)) {
+            return m.content
+                .map((p) =>
+                    typeof p === "object" && p !== null && "text" in p
+                        ? String((p as { text: unknown }).text)
+                        : "",
+                )
+                .join("");
+        }
+    }
+    return "";
+}
+
+export async function llmEvaluatorAgent(jobId: bigint, tier: EvaluatorTier) {
+    "use workflow";
+
+    await recordWorkflowStart("evaluator", jobId);
+
+    const ctx = await loadJobContext(jobId);
+    const deliverable = await fetchDeliverable(ctx.deliverableHash);
+
+    const agent = new DurableAgent({
+        model: modelForTier(tier),
+        instructions: EVALUATOR_SYSTEM_PROMPT,
+    });
+
+    const result = await agent.stream({
+        messages: [
+            {
+                role: "user",
+                content: buildEvaluationPrompt({
+                    jobId,
+                    description: ctx.description,
+                    deliverable: { hash: ctx.deliverableHash, content: deliverable },
+                    budget: ctx.budget,
+                }),
+            },
+        ],
+        writable: getWritable<UIMessageChunk>({ namespace: "evaluator:reasoning" }),
+        stopWhen: stepCountIs(6),
+    });
+
+    const text = extractAssistantText(result.messages);
+    let parsed: EvaluatorOutput;
+    try {
+        parsed = JSON.parse(text);
+    } catch {
+        parsed = {
+            verdict: "reject",
+            score: -100,
+            reasoning: "Evaluator failed to produce parseable JSON output",
+            concerns: ["malformed_output"],
+        };
+    }
+
+    const { evidenceHash } = await persistEvaluation({
+        jobId,
+        tier,
+        model: modelForTier(tier),
+        output: parsed,
+        deliverableHash: ctx.deliverableHash,
+        inputTokens: 0,
+        outputTokens: 0,
+    });
+
+    if (parsed.verdict === "accept") {
+        await callComplete(jobId, evidenceHash);
+    } else {
+        await callReject(jobId, evidenceHash);
+    }
+
+    await fireEvaluatorDoneHook(jobId, {
+        verdict: parsed.verdict,
+        evidenceHash,
+    });
+    await fireJobTerminalHook(
+        jobId,
+        parsed.verdict === "accept" ? "Completed" : "Rejected",
+    );
+
+    await recordWorkflowComplete(parsed.verdict);
+    return { verdict: parsed.verdict, evidenceHash };
+}
