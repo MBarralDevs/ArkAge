@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { createMcpServer } from "@/mcp/server";
 import { resolveAuthContext } from "@/mcp/dispatch";
+// Side-effect import: registers every MCP tool into TOOL_REGISTRY
+// before the first request lands.
+import "@/mcp/register-all-tools";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
