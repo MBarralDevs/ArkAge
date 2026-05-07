@@ -1,6 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { db } from "@/lib/db";
 import { findStuckWorkflows, reconcileStuckWorkflows } from "@/workers/reconcile-stuck-workflows";
+
+// Plan B reconciler queries chain state via readJob and fires resumeHook.
+// Stub both at the module boundary so the test is hermetic — no live RPC,
+// no live workflow runtime needed.
+vi.mock("@/lib/erc8183-state", () => ({
+    readJob: vi.fn(async () => ({
+        client: "0x1111111111111111111111111111111111111111",
+        provider: "0x2222222222222222222222222222222222222222",
+        evaluator: "0x3333333333333333333333333333333333333333",
+        budget: 1_000_000n,
+        expiredAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
+        status: "Funded" as const,
+        reason: "0x" + "00".repeat(32),
+        hook: "0x4444444444444444444444444444444444444444",
+    })),
+    isTerminalState: () => false,
+}));
+
+vi.mock("workflow/api", () => ({
+    resumeHook: vi.fn(async () => undefined),
+}));
 
 describe("findStuckWorkflows", () => {
     beforeEach(async () => {
@@ -73,7 +94,7 @@ describe("reconcileStuckWorkflows", () => {
         await db.auditLog.deleteMany({ where: { actorId: "stuck-workflow-reconciler" } });
     });
 
-    it("writes one audit_log row per stuck workflow and returns counts", async () => {
+    it("fires the right hook + writes one audit_log row per stuck job_lifecycle", async () => {
         const stale = new Date(Date.now() - 20 * 60 * 1000);
         await db.workflowRun.createMany({
             data: [
@@ -98,7 +119,12 @@ describe("reconcileStuckWorkflows", () => {
 
         const result = await reconcileStuckWorkflows();
         expect(result.scanned).toBeGreaterThanOrEqual(2);
-        expect(result.advanced).toBe(result.scanned);
+        // Mocked readJob returns "Funded" so every stuck job_lifecycle
+        // should fire JobFunded.
+        const fired = result.results.filter(
+            (r) => r.outcome === "fired_funded",
+        );
+        expect(fired.length).toBeGreaterThanOrEqual(2);
 
         const rows = await db.auditLog.findMany({
             where: {
@@ -107,5 +133,6 @@ describe("reconcileStuckWorkflows", () => {
             },
         });
         expect(rows.length).toBe(2);
+        expect(rows.every((r) => r.action === "reconcile.fired_funded")).toBe(true);
     });
 });
