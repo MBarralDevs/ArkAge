@@ -22,6 +22,7 @@
     "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@neondatabase/serverless": "^1.1.0",
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/client": "^7.8.0",
