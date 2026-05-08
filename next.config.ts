@@ -5,7 +5,10 @@ import type { NextConfig } from "next";
 import { withWorkflow } from "workflow/next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  // pg-listen pulls in pg-format which uses runtime require() patterns
+  // Turbopack can't statically resolve. Mark these server-only deps as
+  // external so they're loaded via Node at runtime.
+  serverExternalPackages: ["pg-listen", "pg", "pg-format"],
 };
 
 // withWorkflow injects the Vercel Workflow DevKit handler glue at build time.
