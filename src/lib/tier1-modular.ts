@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { db } from "./db.js";
+import { db } from "./db";
 
 /**
  * Tier 1 = Builder's Circle Modular Wallet (passkey, MSCA).

@@ -1,6 +1,6 @@
 import type { Address } from "viem";
-import { db } from "./db.js";
-import { getCircleDcwClient } from "./circle-clients.js";
+import { db } from "./db";
+import { getCircleDcwClient } from "./circle-clients";
 
 /**
  * Tier 2 = Agent's Circle DCW in EOA mode.

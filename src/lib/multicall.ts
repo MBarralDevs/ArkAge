@@ -1,6 +1,6 @@
 import { encodeFunctionData, type Abi, type Address, type Hex } from "viem";
-import { ARC_TESTNET_ADDRESSES } from "./addresses.js";
-import { MULTICALL3_ABI } from "./abis.js";
+import { ARC_TESTNET_ADDRESSES } from "./addresses";
+import { MULTICALL3_ABI } from "./abis";
 
 /**
  * Build calldata for a Multicall3 `aggregate3` batch.

@@ -3,7 +3,7 @@ import {
     CallToolRequestSchema,
     ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { McpAuthContext } from "./auth.js";
+import type { McpAuthContext } from "./auth";
 
 export interface McpToolDefinition<TInput = unknown, TOutput = unknown> {
     name: string;

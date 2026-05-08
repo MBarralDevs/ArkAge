@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import type { AgentPolicy } from "./policy-canonical.js";
+import type { AgentPolicy } from "./policy-canonical";
 
 /**
  * Off-chain policy enforcement.

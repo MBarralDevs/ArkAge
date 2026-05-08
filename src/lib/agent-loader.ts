@@ -1,6 +1,6 @@
 import type { Address } from "viem";
-import { db } from "./db.js";
-import type { AgentPolicy } from "./policy-canonical.js";
+import { db } from "./db";
+import type { AgentPolicy } from "./policy-canonical";
 
 /**
  * The single struct every MCP tool gets when it needs to know "who is

@@ -1,8 +1,8 @@
 import type { Address } from "viem";
 import { db } from "@/lib/db";
 import { hashToken } from "@/lib/tokens";
-import { ok, err, type Result } from "./result.js";
-import type { McpAuthContext } from "./auth.js";
+import { ok, err, type Result } from "./result";
+import type { McpAuthContext } from "./auth";
 
 /**
  * Resolve the authenticated context for an inbound MCP HTTP request.

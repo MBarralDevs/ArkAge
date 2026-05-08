@@ -7,35 +7,35 @@
  */
 
 // --- Identity domain (5 tools) ---
-import "./tools/identity/bootstrap-user.js";
-import "./tools/identity/get-agent-info.js";
-import "./tools/identity/get-my-agents.js";
-import "./tools/identity/update-agent-metadata.js";
-import "./tools/identity/revoke-agent.js";
+import "./tools/identity/bootstrap-user";
+import "./tools/identity/get-agent-info";
+import "./tools/identity/get-my-agents";
+import "./tools/identity/update-agent-metadata";
+import "./tools/identity/revoke-agent";
 
 // --- Jobs domain (9 tools) ---
-import "./tools/jobs/post-job.js";
-import "./tools/jobs/accept-job.js";
-import "./tools/jobs/set-budget.js";
-import "./tools/jobs/fund-job.js";
-import "./tools/jobs/submit-work.js";
-import "./tools/jobs/claim-refund.js";
-import "./tools/jobs/get-job.js";
-import "./tools/jobs/list-jobs.js";
-import "./tools/jobs/query-jobs.js";
+import "./tools/jobs/post-job";
+import "./tools/jobs/accept-job";
+import "./tools/jobs/set-budget";
+import "./tools/jobs/fund-job";
+import "./tools/jobs/submit-work";
+import "./tools/jobs/claim-refund";
+import "./tools/jobs/get-job";
+import "./tools/jobs/list-jobs";
+import "./tools/jobs/query-jobs";
 
 // --- Reputation domain (3 tools) ---
-import "./tools/reputation/get-reputation.js";
-import "./tools/reputation/query-reputation-history.js";
-import "./tools/reputation/compare-agents.js";
+import "./tools/reputation/get-reputation";
+import "./tools/reputation/query-reputation-history";
+import "./tools/reputation/compare-agents";
 
 // --- Treasury domain (2 tools) ---
-import "./tools/treasury/get-treasury-position.js";
-import "./tools/treasury/withdraw-treasury.js";
+import "./tools/treasury/get-treasury-position";
+import "./tools/treasury/withdraw-treasury";
 
 // --- Admin domain (3 tools) ---
-import "./tools/admin/get-protocol-health.js";
-import "./tools/admin/force-advance-workflow.js";
-import "./tools/admin/verify-evidence.js";
+import "./tools/admin/get-protocol-health";
+import "./tools/admin/force-advance-workflow";
+import "./tools/admin/verify-evidence";
 
 export {};

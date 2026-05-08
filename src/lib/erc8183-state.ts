@@ -1,7 +1,7 @@
 import type { Address } from "viem";
-import { publicClient } from "./chain.js";
-import { ARC_TESTNET_ADDRESSES } from "./addresses.js";
-import { ERC8183_ABI } from "./abis.js";
+import { publicClient } from "./chain";
+import { ARC_TESTNET_ADDRESSES } from "./addresses";
+import { ERC8183_ABI } from "./abis";
 
 /**
  * Job status enum mirrors the ERC-8183 spec state machine. Index order

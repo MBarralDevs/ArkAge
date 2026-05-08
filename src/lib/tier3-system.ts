@@ -1,7 +1,7 @@
 import type { Address } from "viem";
-import { env } from "./env.js";
-import { getCircleDcwClient } from "./circle-clients.js";
-import type { QueuedDcwTx } from "./tier2-dcw.js";
+import { env } from "./env";
+import { getCircleDcwClient } from "./circle-clients";
+import type { QueuedDcwTx } from "./tier2-dcw";
 
 /**
  * Tier 3 = ArkAge system wallets. Three roles, all internal:

@@ -1,7 +1,7 @@
 import type { Address } from "viem";
-import { publicClient } from "./chain.js";
-import { ARC_TESTNET_ADDRESSES } from "./addresses.js";
-import { ERC8004_IDENTITY_ABI } from "./abis.js";
+import { publicClient } from "./chain";
+import { ARC_TESTNET_ADDRESSES } from "./addresses";
+import { ERC8004_IDENTITY_ABI } from "./abis";
 
 /**
  * Read the current owner of an ERC-8004 identity NFT.

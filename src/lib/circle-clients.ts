@@ -1,5 +1,5 @@
 import { initiateDeveloperControlledWalletsClient } from "@circle-fin/developer-controlled-wallets";
-import { env } from "./env.js";
+import { env } from "./env";
 
 /**
  * Cached singleton Circle DCW client.
