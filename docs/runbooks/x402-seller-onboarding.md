@@ -64,3 +64,14 @@ UPDATE x402_endpoints SET price_per_call = '5000' WHERE id = <endpointId>;
 ```
 
 A dedicated `arkage:update_x402_endpoint_price` MCP tool is logged for v1.5.
+
+## Live e2e setup
+
+Set the following env vars before running `npm run test:e2e -- tests/e2e/x402-end-to-end.spec.ts`:
+
+- `E2E_X402_LIVE=1` — opt in (skipped otherwise to keep CI fast and Circle Gateway costs out of normal runs)
+- `E2E_BUYER_MCP_TOKEN`, `E2E_SELLER_MCP_TOKEN` — issued via the Plan B Task 33 token-issuance script
+- `E2E_BUYER_AGENT_ID`, `E2E_SELLER_AGENT_ID` — Postgres agent.id values
+- `E2E_SELLER_URL` — the registered endpoint's `effectiveUrl` (proxy or self)
+
+Buyer must have a deposited Gateway balance (run `bootstrap_user` with non-zero `ARKAGE_DEFAULT_GATEWAY_DEPOSIT_USDC` and the `ARKAGE_TIER2_KEY_<walletId>` env var staged).
