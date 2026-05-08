@@ -1,0 +1,207 @@
+import { z } from "zod";
+import type { Address } from "viem";
+import { ok, err, type Result } from "@/mcp/result";
+import { registerTool } from "@/mcp/server";
+import type { McpAuthContext } from "@/mcp/auth";
+import { db } from "@/lib/db";
+import { gatewayClientForAgent, payAndCall } from "@/lib/x402-buyer";
+import { evaluatePolicy } from "@/lib/policy-engine";
+import { loadAgentByDbId } from "@/lib/agent-loader";
+import { route } from "@/lib/wallet-router";
+import {
+    openOrJoinSession,
+    bumpSessionActivity,
+} from "@/lib/x402-session-manager";
+import { recordReceiptForSession } from "@/lib/x402-receipt-store";
+
+const Input = z.object({
+    asAgent: z.string().regex(/^[0-9]+$/),
+    url: z.string().url(),
+    maxPrice: z
+        .string()
+        .regex(/^[0-9]+$/)
+        .optional(),
+    expectedSeller: z
+        .string()
+        .regex(/^0x[a-fA-F0-9]{40}$/)
+        .optional(),
+    requestBody: z.unknown().optional(),
+    requestHeaders: z.record(z.string(), z.string()).optional(),
+    idempotencyKey: z.string().min(1),
+});
+
+interface Output {
+    status: number;
+    body: unknown;
+    amountPaid: string;
+    sellerAddress: string;
+    receiptId: string;
+    sessionId: string;
+    facilitatorTxHash: string | null;
+}
+
+/**
+ * arkage:pay_and_call — buyer-side x402 paid HTTP call.
+ *
+ * Flow:
+ *   1. Off-chain policy gate (spend cap, deny list, rate limit)
+ *   2. Wallet routing → must be Tier 2
+ *   3. Resolve EOA private key for the agent's Tier 2 wallet
+ *      (env-staged for v1 testnet; DCW signing bridge in v1.5)
+ *   4. Call `payAndCall` which wraps `GatewayClient.pay()`
+ *   5. If seller is an ArkAge-registered agent, open/join session
+ *      and persist a receipt; otherwise the receipt is recorded
+ *      against an unknown seller for buyer accounting only.
+ */
+export async function handlePayAndCall(
+    rawInput: unknown,
+    _ctx: McpAuthContext,
+): Promise<Result<Output>> {
+    const parse = Input.safeParse(rawInput);
+    if (!parse.success) return err("validation_error", parse.error.message);
+
+    const agent = await loadAgentByDbId(BigInt(parse.data.asAgent));
+    const maxPriceRaw = parse.data.maxPrice
+        ? BigInt(parse.data.maxPrice)
+        : undefined;
+
+    const verdict = await evaluatePolicy({
+        agentDbId: agent.dbId,
+        policy: agent.policy,
+        action: "x402_pay",
+        ...(maxPriceRaw !== undefined && { amount: maxPriceRaw }),
+        ...(parse.data.expectedSeller !== undefined && {
+            counterparty: parse.data.expectedSeller as Address,
+        }),
+        contractTarget:
+            "0x0000000000000000000000000000000000000000" as Address,
+    });
+    if (!verdict.ok) return err(verdict.code, verdict.message);
+
+    const decision = route({
+        kind: "x402_pay",
+        agent: {
+            agentId: agent.agentId,
+            operatorWallet: agent.operatorWallet,
+            perTxCap: agent.perTxCap,
+            active: agent.active,
+        },
+    });
+    if ("reject" in decision) {
+        return err("routing_rejected", decision.reason);
+    }
+    if (decision.wallet !== "tier2-dcw") {
+        return err(
+            "routing_unexpected",
+            `expected tier2-dcw, got ${decision.wallet}`,
+        );
+    }
+
+    const wallet = await db.wallet.findUniqueOrThrow({
+        where: {
+            address: Buffer.from(
+                agent.operatorWallet.replace(/^0x/, ""),
+                "hex",
+            ),
+        },
+    });
+    if (!wallet.circleWalletId) {
+        return err("config_error", "Tier 2 wallet missing circleWalletId");
+    }
+
+    const eoaPrivateKey = process.env[`ARKAGE_TIER2_KEY_${wallet.id}`] as
+        | `0x${string}`
+        | undefined;
+    if (!eoaPrivateKey) {
+        return err(
+            "config_error",
+            "Tier 2 EOA key not provisioned in env (ARKAGE_TIER2_KEY_<walletId>)",
+        );
+    }
+
+    const client = gatewayClientForAgent(eoaPrivateKey);
+
+    let result;
+    try {
+        result = await payAndCall(client, {
+            url: parse.data.url,
+            ...(maxPriceRaw !== undefined && { maxPriceRaw }),
+            ...(parse.data.expectedSeller !== undefined && {
+                expectedSeller: parse.data.expectedSeller as Address,
+            }),
+            ...(parse.data.requestBody !== undefined && {
+                requestBody: parse.data.requestBody,
+            }),
+            ...(parse.data.requestHeaders !== undefined && {
+                requestHeaders: parse.data.requestHeaders,
+            }),
+        });
+    } catch (e) {
+        return err(
+            "x402_pay_failed",
+            e instanceof Error ? e.message : String(e),
+        );
+    }
+
+    const sellerWalletBytes = Buffer.from(
+        result.sellerAddress.replace(/^0x/, ""),
+        "hex",
+    );
+    const sellerWallet = await db.wallet.findUnique({
+        where: { address: sellerWalletBytes },
+    });
+    let sellerAgentDbId: bigint = 0n;
+    if (sellerWallet) {
+        const sa = await db.agent.findFirst({
+            where: { currentOperatorWalletId: sellerWallet.id },
+        });
+        if (sa) sellerAgentDbId = sa.id;
+    }
+
+    const session =
+        sellerAgentDbId > 0n
+            ? await openOrJoinSession(agent.dbId, sellerAgentDbId)
+            : null;
+
+    const receipt = session
+        ? await recordReceiptForSession({
+              sessionDbId: session.sessionDbId,
+              endpointId: 0n,
+              amount: result.amountPaid,
+              paymentSignature: result.paymentSignature,
+              buyerWallet: agent.operatorWallet as Address,
+              sellerWallet: result.sellerAddress,
+              httpStatus: result.status,
+          })
+        : { receiptDbId: 0n, seq: 0 };
+
+    if (session) await bumpSessionActivity(session.sessionDbId);
+
+    return ok({
+        status: result.status,
+        body: result.body,
+        amountPaid: result.amountPaid.toString(),
+        sellerAddress: result.sellerAddress,
+        receiptId: receipt.receiptDbId.toString(),
+        sessionId: session?.sessionDbId.toString() ?? "0",
+        facilitatorTxHash: result.facilitatorTxHash,
+    });
+}
+
+registerTool({
+    name: "arkage:pay_and_call",
+    description:
+        "Make an x402 paid HTTP call. Auto-opens or joins a session with the seller agent.",
+    inputSchema: {
+        type: "object",
+        properties: {
+            asAgent: { type: "string" },
+            url: { type: "string" },
+            maxPrice: { type: "string" },
+            expectedSeller: { type: "string" },
+            idempotencyKey: { type: "string" },
+        },
+        required: ["asAgent", "url", "idempotencyKey"],
+    },
+    handler: handlePayAndCall,
+});
