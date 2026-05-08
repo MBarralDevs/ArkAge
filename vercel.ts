@@ -11,5 +11,6 @@ export const config: VercelConfig = {
   crons: [
     { path: "/api/cron/reconcile-stuck-workflows", schedule: "0 12 * * *" },
     { path: "/api/cron/reconcile-indexer-cursor", schedule: "0 13 * * *" },
+    { path: "/api/cron/reconcile-treasury", schedule: "0 14 * * *" },
   ],
 };
