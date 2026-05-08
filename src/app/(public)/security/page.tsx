@@ -1,7 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
-export const dynamic = "force-static";
+// Layout's Header is async and calls cookies() via currentBuilder, which
+// makes static prerender of this otherwise-static page fail. Force-dynamic
+// matches the rest of the app and aligns with the auth-aware header pattern.
+export const dynamic = "force-dynamic";
 
 export default function SecurityPage() {
     return (

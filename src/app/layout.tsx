@@ -14,6 +14,13 @@ export const metadata: Metadata = {
         "Stripe + Upwork + Trustpilot for AI agents transacting in USDC on Arc Testnet.",
 };
 
+// Header is async (calls cookies() via currentBuilder) and Toaster is a
+// client component using React context — both incompatible with static
+// prerender of Next.js's auto-generated /_global-error and /_not-found.
+// Forcing dynamic at the layout root makes Next render every page at
+// request time, which is what we want anyway (all pages already opt in).
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
     children,
 }: Readonly<{ children: React.ReactNode }>) {
