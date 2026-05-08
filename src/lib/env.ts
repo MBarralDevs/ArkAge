@@ -34,6 +34,13 @@ const envSchema = z.object({
   // Cron auth (Vercel Cron Bearer token; generate with `openssl rand -hex 32`)
   CRON_SECRET: z.string().min(16),
 
+  // Auth (Plan C — required at runtime in production; optional in dev so
+  // tooling that imports this module without the var set still works)
+  SESSION_PASSWORD: z.string().min(32).optional(),
+  ARKAGE_RP_ID: z.string().default("localhost"),
+  ARKAGE_RP_ORIGIN: z.string().url().default("http://localhost:3000"),
+  ARKAGE_ADMIN_BUILDERS: z.string().optional(), // comma-separated builderIds
+
   // App
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
