@@ -4,7 +4,10 @@ import { db } from "@/lib/db";
 import { ok, err, type Result } from "@/mcp/result";
 import { registerTool } from "@/mcp/server";
 import type { McpAuthContext } from "@/mcp/auth";
-import { provisionTier2DcwForBuilder } from "@/lib/tier2-dcw";
+import {
+    provisionTier2DcwForBuilder,
+    depositTier2ToGateway,
+} from "@/lib/tier2-dcw";
 import { hashPolicy, type AgentPolicy } from "@/lib/policy-canonical";
 import { registerTier1Wallet, type PendingTier1Signature } from "@/lib/tier1-modular";
 import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
@@ -53,6 +56,7 @@ interface BootstrapOutput {
     policyVersion: number;
     policyHash: `0x${string}`;
     pendingActions: PendingTier1Signature[];
+    gatewayDepositTx: `0x${string}` | null;
 }
 
 function defaultPolicy(
@@ -137,6 +141,45 @@ export async function handleBootstrapUser(
         },
     });
 
+    // Best-effort one-time Gateway deposit for the new Tier 2 EOA.
+    // Reads the env-staged testnet key (ARKAGE_TIER2_KEY_<walletId>);
+    // mainnet path graduates to a DCW signTypedData bridge per LBC-1.
+    // Silently skipped when the wallet row isn't visible yet (e.g.,
+    // when `provisionTier2DcwForBuilder` is mocked in tests).
+    let gatewayDepositTx: `0x${string}` | null = null;
+    if (input.mode !== "passkey-only") {
+        const tier2Wallet = await db.wallet.findUnique({
+            where: {
+                address: Buffer.from(
+                    tier2.address.replace(/^0x/, ""),
+                    "hex",
+                ),
+            },
+        });
+        const eoaKey = tier2Wallet
+            ? (process.env[`ARKAGE_TIER2_KEY_${tier2Wallet.id}`] as
+                  | `0x${string}`
+                  | undefined)
+            : undefined;
+        if (tier2Wallet && eoaKey) {
+            const initialDepositAmount =
+                process.env.ARKAGE_DEFAULT_GATEWAY_DEPOSIT_USDC ?? "1.00";
+            try {
+                const dep = await depositTier2ToGateway(
+                    tier2Wallet.id,
+                    eoaKey,
+                    initialDepositAmount,
+                );
+                gatewayDepositTx = dep.depositTxHash;
+            } catch (e) {
+                console.warn(
+                    "[bootstrap] gateway deposit failed:",
+                    e instanceof Error ? e.message : e,
+                );
+            }
+        }
+    }
+
     const pendingActions: PendingTier1Signature[] = [];
     if (input.mode !== "dcw-only") {
         // Two Tier 1 signatures are still owed:
@@ -166,6 +209,7 @@ export async function handleBootstrapUser(
         policyVersion: policy.version,
         policyHash,
         pendingActions,
+        gatewayDepositTx,
     });
 }
 

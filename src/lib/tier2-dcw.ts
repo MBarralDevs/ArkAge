@@ -120,3 +120,42 @@ export async function waitForTxHash(
     }
     throw new Error(`Tier 2 tx ${transactionId} timed out waiting for txHash`);
 }
+
+import { gatewayClientForAgent, ensureGatewayDeposit } from "./x402-buyer";
+
+/**
+ * One-time Gateway Wallet deposit for a Tier 2 EOA. Idempotent —
+ * `ensureGatewayDeposit` returns `alreadyFunded: true` when Gateway
+ * reports sufficient balance.
+ *
+ * v1 testnet limitation: takes a raw EOA private key. v1.5 graduates
+ * to a Circle DCW signTypedData bridge per spec LBC-1.
+ */
+export async function depositTier2ToGateway(
+    walletId: bigint,
+    eoaPrivateKey: `0x${string}`,
+    amountUsdc: string,
+): Promise<{
+    depositTxHash: `0x${string}` | null;
+    alreadyFunded: boolean;
+}> {
+    const client = gatewayClientForAgent(eoaPrivateKey);
+    const result = await ensureGatewayDeposit(client, amountUsdc);
+
+    if (result.depositTxHash) {
+        await db.auditLog.create({
+            data: {
+                actorKind: "system",
+                actorId: "bootstrap",
+                action: "x402.gateway_deposit",
+                targetKind: "wallet",
+                targetId: walletId.toString(),
+                payloadJsonb: {
+                    txHash: result.depositTxHash,
+                    amountUsdc,
+                } as object,
+            },
+        });
+    }
+    return result;
+}
