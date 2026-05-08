@@ -38,4 +38,11 @@ import "./tools/admin/get-protocol-health";
 import "./tools/admin/force-advance-workflow";
 import "./tools/admin/verify-evidence";
 
+// --- x402 domain (5 tools, Plan D) ---
+import "./tools/x402/pay-and-call";
+import "./tools/x402/register-x402-endpoint";
+import "./tools/x402/list-my-x402-endpoints";
+import "./tools/x402/list-my-x402-receipts";
+import "./tools/x402/dispute-receipt";
+
 export {};
