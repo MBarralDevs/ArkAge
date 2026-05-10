@@ -21,7 +21,9 @@
     "db:seed": "dotenv -e .env.local -- prisma db seed",
     "db:studio": "dotenv -e .env.local -- prisma studio",
     "db:format": "dotenv -e .env.local -- prisma format",
-    "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts"
+    "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts",
+    "smoke:issue-token": "dotenv -e .env.local -- tsx scripts/smoke-issue-token.ts",
+    "smoke:register-tier2": "dotenv -e .env.local -- tsx scripts/smoke-register-external-tier2.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

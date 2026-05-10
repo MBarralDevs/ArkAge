@@ -105,10 +105,12 @@ export async function handlePayAndCall(
             ),
         },
     });
-    if (!wallet.circleWalletId) {
-        return err("config_error", "Tier 2 wallet missing circleWalletId");
-    }
 
+    // x402 signs via the env-staged raw EOA key (Plan D Task 1, LBC-1
+    // testnet limitation). circleWalletId is irrelevant to this path —
+    // it's only used by tools that route through Circle's DCW contract-
+    // execution API. External-EOA Tier 2 wallets have circleWalletId=null
+    // and that's fine.
     const eoaPrivateKey = process.env[`ARKAGE_TIER2_KEY_${wallet.id}`] as
         | `0x${string}`
         | undefined;
