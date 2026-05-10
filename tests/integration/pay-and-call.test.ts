@@ -91,6 +91,7 @@ vi.mock("@/lib/db", () => {
                 findUnique: vi.fn(async () => null),
             },
             agent: { findFirst: vi.fn(async () => null) },
+            x402Endpoint: { findUnique: vi.fn(async () => null) },
         },
     };
 });
@@ -101,19 +102,20 @@ describe("pay_and_call", () => {
         process.env.ARKAGE_TIER2_KEY_42 = ("0x" + "11".repeat(32)) as string;
 
         const { db } = await import("@/lib/db");
-        // Override db.wallet.findUnique for the seller lookup so we hit
-        // the "registered seller" branch.
-        (db.wallet.findUnique as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-            id: 99n,
-        });
-        (db.agent.findFirst as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
-            id: 200n,
+        // URL points at our own arkage-proxy → tool resolves endpoint
+        // by id from x402Endpoint.findUnique. Mock it to return a
+        // seller mapping so canPersistReceipt is satisfied.
+        (
+            db.x402Endpoint.findUnique as ReturnType<typeof vi.fn>
+        ).mockResolvedValueOnce({
+            id: 5n,
+            sellerAgentId: 200n,
         });
 
         const result = await handlePayAndCall(
             {
                 asAgent: "1",
-                url: "https://seller.test/api/data",
+                url: "https://arkage.network/api/x402-proxy/5",
                 maxPrice: "5000",
                 idempotencyKey: "pc-1",
             },

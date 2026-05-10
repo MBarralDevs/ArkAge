@@ -157,30 +157,57 @@ export async function handlePayAndCall(
         );
     }
 
-    const sellerWalletBytes = Buffer.from(
-        result.sellerAddress.replace(/^0x/, ""),
-        "hex",
-    );
-    const sellerWallet = await db.wallet.findUnique({
-        where: { address: sellerWalletBytes },
-    });
+    // Try to resolve seller agent + endpoint:
+    //   1. If the URL points at our own arkage-proxy, parse endpointId
+    //      from the path and look up its sellerAgent (covers the v1
+    //      common case — external EOA buyers can't easily query their
+    //      own SDK return for the seller address).
+    //   2. Otherwise fall back to looking up sellerAddress
+    //      (caller-supplied via expectedSeller) in our wallets table.
+    let endpointDbId = 0n;
     let sellerAgentDbId: bigint = 0n;
-    if (sellerWallet) {
-        const sa = await db.agent.findFirst({
-            where: { currentOperatorWalletId: sellerWallet.id },
+    const proxyMatch = parse.data.url.match(
+        /\/api\/x402-proxy\/(\d+)/,
+    );
+    if (proxyMatch && proxyMatch[1]) {
+        const ep = await db.x402Endpoint.findUnique({
+            where: { id: BigInt(proxyMatch[1]) },
         });
-        if (sa) sellerAgentDbId = sa.id;
+        if (ep) {
+            endpointDbId = ep.id;
+            sellerAgentDbId = ep.sellerAgentId;
+        }
+    }
+    if (sellerAgentDbId === 0n && result.sellerAddress !== "0x") {
+        const sellerWalletBytes = Buffer.from(
+            result.sellerAddress.replace(/^0x/, ""),
+            "hex",
+        );
+        const sellerWallet = await db.wallet.findUnique({
+            where: { address: sellerWalletBytes },
+        });
+        if (sellerWallet) {
+            const sa = await db.agent.findFirst({
+                where: { currentOperatorWalletId: sellerWallet.id },
+            });
+            if (sa) sellerAgentDbId = sa.id;
+        }
     }
 
+    // Only persist a receipt when we have a valid endpoint row to
+    // satisfy the x402_receipts → x402_endpoints FK. Sessions without
+    // a registered endpoint still record the call as audit-only via
+    // the workflow run.
+    const canPersistReceipt = sellerAgentDbId > 0n && endpointDbId > 0n;
     const session =
         sellerAgentDbId > 0n
             ? await openOrJoinSession(agent.dbId, sellerAgentDbId)
             : null;
 
-    const receipt = session
+    const receipt = canPersistReceipt && session
         ? await recordReceiptForSession({
               sessionDbId: session.sessionDbId,
-              endpointId: 0n,
+              endpointId: endpointDbId,
               amount: result.amountPaid,
               paymentSignature: result.paymentSignature,
               buyerWallet: agent.operatorWallet as Address,
