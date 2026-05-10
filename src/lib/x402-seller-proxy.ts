@@ -267,12 +267,34 @@ async function webRequestToExpressLike(
     };
 }
 
+function toArrayBuffer(data: unknown): ArrayBuffer {
+    if (data === undefined || data === null) return new ArrayBuffer(0);
+    if (data instanceof ArrayBuffer) return data;
+    if (data instanceof Uint8Array) {
+        const ab = new ArrayBuffer(data.byteLength);
+        new Uint8Array(ab).set(data);
+        return ab;
+    }
+    const u8 = new TextEncoder().encode(
+        typeof data === "string" ? data : JSON.stringify(data),
+    );
+    const ab = new ArrayBuffer(u8.byteLength);
+    new Uint8Array(ab).set(u8);
+    return ab;
+}
+
 function makeExpressResLike(onSend: (payload: CapturedResponse) => void) {
-    let status = 200;
     const headers: Record<string, string> = {};
+    // Circle's middleware uses Node `IncomingMessage`/`ServerResponse` style
+    // (`res.statusCode = 402`, `res.end(body)`) — NOT Express
+    // (`res.status().json()`). Both shapes are supported here so the adapter
+    // bridges either flavor of caller.
     const res: Record<string, unknown> = {
+        // Node-style: statusCode is a settable property.
+        statusCode: 200,
+        // Express-style alias.
         status(code: number) {
-            status = code;
+            (res as { statusCode: number }).statusCode = code;
             return res;
         },
         setHeader(k: string, v: string) {
@@ -283,36 +305,45 @@ function makeExpressResLike(onSend: (payload: CapturedResponse) => void) {
             headers[k.toLowerCase()] = v;
             return res;
         },
+        getHeader(k: string) {
+            return headers[k.toLowerCase()];
+        },
         json(obj: unknown) {
             headers["content-type"] =
                 headers["content-type"] ?? "application/json";
             const buf = new TextEncoder().encode(JSON.stringify(obj));
             const ab = new ArrayBuffer(buf.byteLength);
             new Uint8Array(ab).set(buf);
-            onSend({ status, headers, body: ab });
+            onSend({
+                status: (res as { statusCode: number }).statusCode,
+                headers,
+                body: ab,
+            });
         },
         send(data: unknown) {
-            let buf: ArrayBuffer;
-            if (data instanceof ArrayBuffer) {
-                buf = data;
-            } else if (data instanceof Uint8Array) {
-                const ab = new ArrayBuffer(data.byteLength);
-                new Uint8Array(ab).set(data);
-                buf = ab;
-            } else {
-                const u8 = new TextEncoder().encode(
-                    typeof data === "string"
-                        ? data
-                        : JSON.stringify(data),
-                );
-                const ab = new ArrayBuffer(u8.byteLength);
-                new Uint8Array(ab).set(u8);
-                buf = ab;
-            }
-            onSend({ status, headers, body: buf });
+            onSend({
+                status: (res as { statusCode: number }).statusCode,
+                headers,
+                body: toArrayBuffer(data),
+            });
         },
-        end() {
-            onSend({ status, headers, body: new ArrayBuffer(0) });
+        // Node-style: end() may receive a body argument.
+        end(data?: unknown) {
+            onSend({
+                status: (res as { statusCode: number }).statusCode,
+                headers,
+                body: toArrayBuffer(data),
+            });
+        },
+        // Node-style writeHead: writeHead(statusCode, headers?)
+        writeHead(code: number, hdrs?: Record<string, string>) {
+            (res as { statusCode: number }).statusCode = code;
+            if (hdrs) {
+                for (const [k, v] of Object.entries(hdrs)) {
+                    headers[k.toLowerCase()] = v;
+                }
+            }
+            return res;
         },
     };
     return res;
