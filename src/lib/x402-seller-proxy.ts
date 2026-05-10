@@ -140,6 +140,19 @@ export async function proxyThroughGateway(
     // 402 path — middleware sent the response itself; relay as-is.
     if (!nextCalled && captured) {
         const cap = captured as CapturedResponse;
+        // Forensic log when the middleware returned an error (e.g. Circle's
+        // facilitator said "Payment verification failed"). The body is JSON
+        // with `error` + `reason` per the SDK's `gateway.require()` impl.
+        if (cap.status >= 400) {
+            try {
+                const text = new TextDecoder().decode(cap.body);
+                console.log(
+                    `[x402-proxy] middleware returned ${cap.status}: ${text}`,
+                );
+            } catch {
+                /* body not decodable */
+            }
+        }
         return {
             status: cap.status,
             body: cap.body,
