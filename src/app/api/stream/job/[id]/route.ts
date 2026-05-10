@@ -1,77 +1,61 @@
-import { listenToChannel } from "@/lib/pg-notify";
+import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * Per-job SSE stream. Subscribes to `arkage:job:<id>` so the
- * `/jobs/[id]` page can render new lifecycle events as they hit
- * Postgres without polling.
+ * Per-job polling endpoint. Same shape as `/api/stream/jobs` but
+ * scoped to one job — used by `/jobs/[id]` for live event-list
+ * updates.
+ *
+ * See `../jobs/route.ts` for why we poll instead of LISTEN/SSE.
  */
+
 export async function GET(
     request: Request,
     { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
     const { id } = await params;
     if (!/^[0-9]+$/.test(id)) {
-        return new Response("bad id", { status: 400 });
+        return NextResponse.json({ error: "bad id" }, { status: 400 });
     }
 
     const job = await db.job.findUnique({
         where: { jobId: id },
         select: { id: true },
     });
-    if (!job) return new Response("not found", { status: 404 });
+    if (!job) {
+        return NextResponse.json({ error: "not found" }, { status: 404 });
+    }
 
-    const encoder = new TextEncoder();
-    let cleanup: (() => Promise<void>) | null = null;
+    const url = new URL(request.url);
+    const sinceMs = parseInt(url.searchParams.get("since") ?? "0", 10);
+    const since =
+        Number.isFinite(sinceMs) && sinceMs > 0
+            ? new Date(sinceMs)
+            : new Date(Date.now() - 60_000);
 
-    const stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-            const send = (event: string, data: unknown) => {
-                try {
-                    controller.enqueue(
-                        encoder.encode(
-                            `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-                        ),
-                    );
-                } catch {
-                    /* closed */
-                }
-            };
-            send("hello", { jobId: id });
-
-            cleanup = await listenToChannel(
-                `arkage:job:${id}`,
-                (payload) => send("job_event", payload),
-            );
-
-            const keepalive = setInterval(
-                () => send("ping", { ts: Date.now() }),
-                25_000,
-            );
-            request.signal.addEventListener("abort", () => {
-                clearInterval(keepalive);
-                cleanup?.();
-                try {
-                    controller.close();
-                } catch {
-                    /* already closed */
-                }
-            });
-        },
-        cancel() {
-            cleanup?.();
+    const rows = await db.jobEvent.findMany({
+        where: { jobId: job.id, blockTime: { gt: since } },
+        orderBy: { blockTime: "desc" },
+        take: 50,
+        select: {
+            eventKind: true,
+            blockTime: true,
+            txHash: true,
         },
     });
 
-    return new Response(stream, {
-        headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    });
+    const events = rows.map((r) => ({
+        jobId: id,
+        eventKind: r.eventKind,
+        blockTime: r.blockTime.toISOString(),
+        txHash: "0x" + Buffer.from(r.txHash).toString("hex"),
+    }));
+
+    return NextResponse.json(
+        { events, serverTime: Date.now() },
+        { headers: { "Cache-Control": "no-store" } },
+    );
 }

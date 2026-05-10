@@ -1,73 +1,58 @@
-import { listenToChannel } from "@/lib/pg-notify";
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * SSE stream of all job events. Public — driven by Postgres LISTEN
- * `arkage:jobs` (fired post-commit from the job_events INSERT trigger).
+ * Polling endpoint for the global job-event feed.
  *
- * Vercel Functions kill idle SSE after ~30s of inactivity, so we ping
- * every 25s to keep the connection alive within the function timeout.
- * AbortSignal handler ensures we unlistenAll on client disconnect so
- * we don't leak Postgres LISTEN connections.
+ * Plan C originally used Postgres LISTEN/NOTIFY + SSE for sub-second
+ * updates, but `pg-listen` (via `pg-format`) does a runtime
+ * `require('./reserved')` that Vercel's serverless tracer can't
+ * resolve when the package is in `serverExternalPackages`. We swap
+ * the long-lived LISTEN connection for short-poll: the client hits
+ * `?since=<unix-ms>` every few seconds and we return any `job_events`
+ * rows newer than that. Slightly higher latency (3-5s), trivial
+ * runtime cost, no native-module bundling drama.
+ *
+ * Response shape:
+ *   { events: [{ jobId, eventKind, blockTime, txHash }], serverTime }
+ *
+ * The trigger migration (Plan C Task 4) and `src/lib/pg-notify.ts`
+ * stay in place — they're cheap and useful when we eventually run a
+ * dedicated worker outside Vercel functions.
  */
+
 export async function GET(request: Request): Promise<Response> {
-    const encoder = new TextEncoder();
+    const url = new URL(request.url);
+    const sinceMs = parseInt(url.searchParams.get("since") ?? "0", 10);
+    const since = Number.isFinite(sinceMs) && sinceMs > 0
+        ? new Date(sinceMs)
+        : new Date(Date.now() - 60_000);
 
-    let closed = false;
-    let cleanup: (() => Promise<void>) | null = null;
-
-    const stream = new ReadableStream<Uint8Array>({
-        async start(controller) {
-            const send = (event: string, data: unknown) => {
-                if (closed) return;
-                try {
-                    controller.enqueue(
-                        encoder.encode(
-                            `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
-                        ),
-                    );
-                } catch {
-                    /* controller closed */
-                }
-            };
-
-            send("hello", { ts: Date.now() });
-
-            cleanup = await listenToChannel<{
-                jobId: string;
-                eventKind: string;
-            }>("arkage:jobs", (payload) => send("job", payload));
-
-            const keepalive = setInterval(
-                () => send("ping", { ts: Date.now() }),
-                25_000,
-            );
-
-            request.signal.addEventListener("abort", () => {
-                closed = true;
-                clearInterval(keepalive);
-                cleanup?.();
-                try {
-                    controller.close();
-                } catch {
-                    /* already closed */
-                }
-            });
-        },
-        cancel() {
-            closed = true;
-            cleanup?.();
+    const rows = await db.jobEvent.findMany({
+        where: { blockTime: { gt: since } },
+        orderBy: { blockTime: "desc" },
+        take: 50,
+        select: {
+            jobId: true,
+            eventKind: true,
+            blockTime: true,
+            txHash: true,
+            job: { select: { jobId: true } },
         },
     });
 
-    return new Response(stream, {
-        headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache, no-transform",
-            Connection: "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    });
+    const events = rows.map((r) => ({
+        jobId: r.job.jobId.toString(),
+        eventKind: r.eventKind,
+        blockTime: r.blockTime.toISOString(),
+        txHash: "0x" + Buffer.from(r.txHash).toString("hex"),
+    }));
+
+    return NextResponse.json(
+        { events, serverTime: Date.now() },
+        { headers: { "Cache-Control": "no-store" } },
+    );
 }

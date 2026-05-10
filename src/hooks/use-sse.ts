@@ -3,11 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Generic EventSource hook for SSE consumers.
+ * Generic EventSource hook for true Server-Sent Events streams.
  *
- * Caps the in-memory event buffer at `max` (default 100) so a long
- * stream doesn't accumulate forever. `eventTypes` defaults to `["message"]`;
- * pass the named events your route emits (e.g. `["job", "ping"]`).
+ * Use this for routes that emit `text/event-stream` chunks
+ * (e.g. `/api/stream/workflow/[runId]` which proxies a Vercel Workflow
+ * `getReadable()` stream).
+ *
+ * For polling-based feeds (job_events, x402_receipts), use `usePolling`
+ * instead — Vercel serverless functions can't sustain the long-lived
+ * `pg-listen` connection the dashboard live-feeds originally used.
+ *
+ * Caps the in-memory event buffer at `max` (default 100). `eventTypes`
+ * defaults to `["message"]`; pass the named events your route emits
+ * (e.g. `["job", "ping"]`).
  */
 
 export interface SseEvent<T = unknown> {

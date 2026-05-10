@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useSse } from "@/hooks/use-sse";
+import { usePolling } from "@/hooks/use-polling";
 import { EventRow } from "@/components/primitives/event-row";
 import {
     Card,
@@ -17,9 +17,9 @@ interface JobEvt {
 }
 
 export function LiveEventTicker() {
-    const { events, connected } = useSse<JobEvt>("/api/stream/jobs", {
-        eventTypes: ["job"],
+    const { events, connected } = usePolling<JobEvt>("/api/stream/jobs", {
         max: 12,
+        pollMs: 3000,
     });
 
     return (
