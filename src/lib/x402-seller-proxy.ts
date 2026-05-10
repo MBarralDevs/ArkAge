@@ -184,6 +184,15 @@ export async function proxyThroughGateway(
         `[x402-proxy] upstream body bytes=${upstreamBody.byteLength}`,
     );
     const outHeaders = new Headers(upstream.headers);
+    // undici's `await upstream.arrayBuffer()` auto-decompresses brotli/gzip
+    // payloads, but `upstream.headers` still claims the original encoding.
+    // Relaying the encoding header would make the buyer try to decompress
+    // already-uncompressed bytes — surfaces as "Decompression failed" /
+    // "terminated" on the SDK side. Strip both encoding markers and the
+    // (now-stale) content-length.
+    outHeaders.delete("content-encoding");
+    outHeaders.delete("content-length");
+    outHeaders.delete("transfer-encoding");
     if (captured) {
         const cap = captured as CapturedResponse;
         if (cap.headers["payment-response"]) {
