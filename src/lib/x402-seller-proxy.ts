@@ -85,9 +85,19 @@ export async function proxyThroughGateway(
     endpoint: ProxyEndpoint,
     request: Request,
 ): Promise<ProxyOutcome> {
+    // Circle's middleware defaults to https://gateway-api.circle.com
+    // (mainnet), which doesn't list testnet networks → would return
+    // HTTP 503 "No payment networks available" for Arc Testnet
+    // (eip155:5042002, only listed on the testnet facilitator).
+    // Per spec the testnet hostname is fixed; expose an env override
+    // for dev / mainnet promotion.
+    const facilitatorUrl =
+        process.env.ARKAGE_X402_FACILITATOR_URL ??
+        "https://gateway-api-testnet.circle.com";
     const gateway = createGatewayMiddleware({
         sellerAddress: endpoint.sellerWallet,
         networks: ARC_TESTNET_CAIP2,
+        facilitatorUrl,
     });
     const guard = gateway.require(formatPriceUsd(endpoint.pricePerCall));
 
