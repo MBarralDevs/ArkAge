@@ -69,25 +69,29 @@ export interface PayAndCallResult {
     facilitatorTxHash: `0x${string}` | null;
 }
 
+/**
+ * Real `@circle-fin/x402-batching@3.0.4` PayResult shape (verified
+ * against `node_modules/@circle-fin/x402-batching/dist/client/index.js`):
+ *
+ *   { data, amount: bigint, formattedAmount: string,
+ *     transaction: string, status: number }
+ *
+ * Plan D Task 1's pseudo-code assumed a nested `result.payment.{...}`
+ * shape that doesn't exist. Flatten and add what we can recover from
+ * the request context (sellerAddress from `expectedSeller`).
+ */
 interface RawPayResult {
     status: number;
     data: unknown;
-    headers?: Record<string, string>;
-    payment: {
-        signature?: `0x${string}`;
-        amount?: string;
-        payTo?: string;
-        settlementTxHash?: `0x${string}`;
-    };
+    amount: bigint;
+    formattedAmount: string;
+    transaction: string;
 }
 
-/** Execute a paid request through the GatewayClient SDK. */
 export async function payAndCall(
     client: GatewayClient,
     params: PayAndCallParams,
 ): Promise<PayAndCallResult> {
-    // The SDK's `pay()` returns `PayResult<T>` with a different surface
-    // shape across versions. We cast through `unknown` and normalize.
     const result = (await (
         client as unknown as {
             pay: (
@@ -109,34 +113,39 @@ export async function payAndCall(
         ...(params.requestBody !== undefined && { body: params.requestBody }),
     })) as RawPayResult;
 
-    const paymentResponseHeader = result.headers?.["payment-response"] ?? null;
-
-    if (
-        params.expectedSeller &&
-        result.payment?.payTo?.toLowerCase() !==
-            params.expectedSeller.toLowerCase()
-    ) {
-        throw new Error(
-            `x402: expected seller ${params.expectedSeller} but 402 declared ${result.payment?.payTo}`,
-        );
-    }
     if (
         params.maxPriceRaw !== undefined &&
-        BigInt(result.payment?.amount ?? "0") > params.maxPriceRaw
+        result.amount > params.maxPriceRaw
     ) {
         throw new Error(
-            `x402: 402 demanded ${result.payment?.amount} > maxPrice ${params.maxPriceRaw}`,
+            `x402: 402 demanded ${result.amount} > maxPrice ${params.maxPriceRaw}`,
         );
     }
+
+    // The SDK's PayResult does NOT expose the EIP-3009 signature or the
+    // seller payTo back to the caller — they're computed internally and
+    // serialized into the Payment-Signature header sent to the seller.
+    // sellerAddress: derive from expectedSeller (caller-supplied) OR
+    // empty (downstream session lookup just won't match → no session row).
+    // paymentSignature: use the on-chain transaction hash as the
+    // correlation key with Circle's facilitator settlement webhook
+    // (the webhook's batch_completed payload includes paymentSignatures
+    // by EIP-3009 sig, but for receipt-row purposes the tx hash is
+    // unique enough).
+    const sellerAddress = (params.expectedSeller ?? "0x") as Address;
+    const txHash = result.transaction
+        ? (result.transaction as `0x${string}`)
+        : ("0x" as `0x${string}`);
 
     return {
         status: result.status,
         body: result.data,
-        paymentSignature: (result.payment.signature ??
-            "0x") as `0x${string}`,
-        amountPaid: BigInt(result.payment.amount ?? "0"),
-        sellerAddress: (result.payment.payTo ?? "0x") as Address,
-        paymentResponseHeader,
-        facilitatorTxHash: result.payment.settlementTxHash ?? null,
+        paymentSignature: txHash,
+        amountPaid: result.amount,
+        sellerAddress,
+        paymentResponseHeader: null,
+        facilitatorTxHash: result.transaction
+            ? (result.transaction as `0x${string}`)
+            : null,
     };
 }
