@@ -137,10 +137,6 @@ export async function proxyThroughGateway(
         ).catch(() => resolve());
     });
 
-    console.log(
-        `[x402-proxy] middleware finished: nextCalled=${nextCalled} captured=${captured !== null}`,
-    );
-
     // 402 path — middleware sent the response itself; relay as-is.
     if (!nextCalled && captured) {
         const cap = captured as CapturedResponse;
@@ -165,9 +161,6 @@ export async function proxyThroughGateway(
     }
 
     // next() was called — payment verified. Forward to upstream.
-    console.log(
-        `[x402-proxy] forwarding to upstream ${endpoint.upstreamUrl}`,
-    );
     const isBodyless =
         request.method === "GET" || request.method === "HEAD";
     const upstream = await fetch(endpoint.upstreamUrl, {
@@ -175,14 +168,8 @@ export async function proxyThroughGateway(
         headers: stripPaymentHeaders(request.headers),
         ...(isBodyless ? {} : { body: await request.arrayBuffer() }),
     });
-    console.log(
-        `[x402-proxy] upstream responded: status=${upstream.status} contentType=${upstream.headers.get("content-type")}`,
-    );
 
     const upstreamBody = await upstream.arrayBuffer();
-    console.log(
-        `[x402-proxy] upstream body bytes=${upstreamBody.byteLength}`,
-    );
     const outHeaders = new Headers(upstream.headers);
     // undici's `await upstream.arrayBuffer()` auto-decompresses brotli/gzip
     // payloads, but `upstream.headers` still claims the original encoding.

@@ -139,18 +139,17 @@ export async function handlePayAndCall(
             }),
         });
     } catch (e) {
-        // Diag: log the full error chain (SDK errors wrap underlying causes).
-        console.error("[pay_and_call] SDK threw:", {
-            name: e instanceof Error ? e.name : typeof e,
-            message: e instanceof Error ? e.message : String(e),
-            stack: e instanceof Error ? e.stack : undefined,
-            cause:
-                e instanceof Error && (e as Error & { cause?: unknown }).cause
-                    ? String(
-                          (e as Error & { cause?: unknown }).cause,
-                      )
-                    : undefined,
-        });
+        // SDK errors often wrap a useful `cause` (network errors, etc.).
+        // Surface both in the audit log without including the full stack.
+        const cause =
+            e instanceof Error && (e as Error & { cause?: unknown }).cause
+                ? String((e as Error & { cause?: unknown }).cause)
+                : undefined;
+        console.error(
+            "[pay_and_call] SDK threw:",
+            e instanceof Error ? e.message : String(e),
+            cause ? `(cause: ${cause})` : "",
+        );
         return err(
             "x402_pay_failed",
             e instanceof Error ? e.message : String(e),
