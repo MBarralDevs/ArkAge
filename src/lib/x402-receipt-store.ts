@@ -80,25 +80,38 @@ export async function recordReceiptForSession(
             sellerAgent: { select: { agentId: true } },
         },
     });
-    await resumeHook(
-        x402SessionToken(
-            BigInt(session.buyerAgent.agentId.toString()),
-            BigInt(session.sellerAgent.agentId.toString()),
-        ),
-        {
-            kind: "receipt",
-            receipt: {
-                sessionDbId: input.sessionDbId.toString(),
-                endpointDbId: input.endpointId.toString(),
-                paymentSignature: input.paymentSignature,
-                amount: input.amount.toString(),
-                requestHash: input.requestHash ?? "0x" + "00".repeat(32),
-                responseHash: input.responseHash,
-                httpStatus: input.httpStatus,
-                seq: nextSeq,
+    // resumeHook is a wake-up signal for the live x402PaymentSession
+    // workflow, NOT a write to durable state. If the hook is missing
+    // (workflow already idle-timed out, or never registered yet because
+    // of the spawn-vs-receipt race), the receipt is still valid — we
+    // just don't wake the workflow this iteration. Log and continue.
+    try {
+        await resumeHook(
+            x402SessionToken(
+                BigInt(session.buyerAgent.agentId.toString()),
+                BigInt(session.sellerAgent.agentId.toString()),
+            ),
+            {
+                kind: "receipt",
+                receipt: {
+                    sessionDbId: input.sessionDbId.toString(),
+                    endpointDbId: input.endpointId.toString(),
+                    paymentSignature: input.paymentSignature,
+                    amount: input.amount.toString(),
+                    requestHash:
+                        input.requestHash ?? "0x" + "00".repeat(32),
+                    responseHash: input.responseHash,
+                    httpStatus: input.httpStatus,
+                    seq: nextSeq,
+                },
             },
-        },
-    );
+        );
+    } catch (e) {
+        console.warn(
+            "[x402-receipt-store] resumeHook non-fatal:",
+            e instanceof Error ? e.message : String(e),
+        );
+    }
 
     return { receiptDbId: created.id, seq: nextSeq };
 }
