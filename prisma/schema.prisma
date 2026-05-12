@@ -53,17 +53,25 @@ model Wallet {
 }
 
 model Agent {
-  id                      BigInt                 @id @default(autoincrement())
-  agentId                 Decimal                @unique @map("agent_id") @db.Decimal(78, 0)
-  identityOwnerWallet     Bytes                  @map("identity_owner_wallet")
-  currentOperatorWalletId BigInt                 @map("current_operator_wallet_id")
-  currentMetadataId       BigInt?                @map("current_metadata_id")
-  currentPolicyId         BigInt?                @map("current_policy_id")
-  agentWalletAddress      Bytes                  @map("agent_wallet_address")
-  registeredAtBlock       BigInt                 @map("registered_at_block")
-  active                  Boolean                @default(true)
-  createdAt               DateTime               @default(now()) @map("created_at")
-  updatedAt               DateTime               @updatedAt @map("updated_at")
+  id                       BigInt                 @id @default(autoincrement())
+  agentId                  Decimal                @unique @map("agent_id") @db.Decimal(78, 0)
+  identityOwnerWallet      Bytes                  @map("identity_owner_wallet")
+  currentOperatorWalletId  BigInt                 @map("current_operator_wallet_id")
+  currentMetadataId        BigInt?                @map("current_metadata_id")
+  currentPolicyId          BigInt?                @map("current_policy_id")
+  agentWalletAddress       Bytes                  @map("agent_wallet_address")
+  registeredAtBlock        BigInt                 @map("registered_at_block")
+  active                   Boolean                @default(true)
+  // Plan E2 — ERC-8004 on-chain anchor (null when agent is Postgres-only).
+  // chainAgentId is the IdentityRegistry token id; the two tx-hash columns
+  // record the two-step mint + AgentRegistry-bind flow. onChainRegisteredAt
+  // is set only after BOTH transactions land successfully.
+  chainAgentId             BigInt?                @unique @map("chain_agent_id")
+  identityRegisterTxHash   Bytes?                 @map("identity_register_tx_hash")
+  agentRegistryTxHash      Bytes?                 @map("agent_registry_tx_hash")
+  onChainRegisteredAt      DateTime?              @map("on_chain_registered_at")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
   currentOperatorWallet   Wallet                 @relation(fields: [currentOperatorWalletId], references: [id])
   metadata                AgentMetadata[]
   policies                Policy[]
