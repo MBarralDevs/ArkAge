@@ -25,7 +25,8 @@
     "smoke:issue-token": "dotenv -e .env.local -- tsx scripts/smoke-issue-token.ts",
     "smoke:register-tier2": "dotenv -e .env.local -- tsx scripts/smoke-register-external-tier2.ts",
     "smoke:register-seller": "dotenv -e .env.local -- tsx scripts/smoke-register-seller-agent.ts",
-    "smoke:register-circle-agent": "dotenv -e .env.local -- tsx scripts/smoke-register-circle-agent.ts"
+    "smoke:register-circle-agent": "dotenv -e .env.local -- tsx scripts/smoke-register-circle-agent.ts",
+    "smoke:onchain-anchor": "dotenv -e .env.local -- tsx scripts/smoke-onchain-anchor.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",
