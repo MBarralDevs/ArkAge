@@ -1,5 +1,11 @@
-import { encodeFunctionData, type Address, type Hex, type Log } from "viem";
+import { encodeFunctionData, type Address, type Hex } from "viem";
 import { identityRegistryAbi, agentRegistryAbi } from "./abis/erc-8004";
+
+/** Minimal log shape we need to read — broader than viem's `Log` tuple type. */
+export interface TransferLogLike {
+    address: string;
+    topics: readonly (string | undefined)[];
+}
 
 /**
  * Plan E2 helpers for on-chain anchoring (ERC-8004 IdentityRegistry +
@@ -56,7 +62,7 @@ export function encodeAgentRegistryRegister(params: {
  * events from other ERC-721s in the same block.
  */
 export function parseTokenIdFromTransferLogs(
-    logs: ReadonlyArray<Pick<Log, "address" | "topics">>,
+    logs: ReadonlyArray<TransferLogLike>,
     registryAddress: Address,
 ): bigint | null {
     const TRANSFER_TOPIC =

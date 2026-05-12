@@ -6,13 +6,17 @@
  * have to. Adding a new tool = one new line here.
  */
 
-// --- Identity domain (6 tools — register-agent-wallet added in Plan E1) ---
+// --- Identity domain (9 tools — Plan E1 added register-agent-wallet;
+//     Plan E2 added the 3-step on-chain anchoring trio) ---
 import "./tools/identity/bootstrap-user";
 import "./tools/identity/get-agent-info";
 import "./tools/identity/get-my-agents";
 import "./tools/identity/update-agent-metadata";
 import "./tools/identity/revoke-agent";
 import "./tools/identity/register-agent-wallet";
+import "./tools/identity/register-agent-onchain";
+import "./tools/identity/complete-onchain-registration";
+import "./tools/identity/finalize-onchain-registration";
 
 // --- Jobs domain (9 tools) ---
 import "./tools/jobs/post-job";

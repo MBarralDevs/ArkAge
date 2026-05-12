@@ -68,7 +68,10 @@ describe("encodeAgentRegistryRegister", () => {
 });
 
 describe("parseTokenIdFromTransferLogs", () => {
-    function mintLog(tokenId: bigint, address = REGISTRY) {
+    function mintLog(
+        tokenId: bigint,
+        address: `0x${string}` = REGISTRY,
+    ): { address: `0x${string}`; topics: Hex[] } {
         return {
             address,
             topics: [
@@ -76,7 +79,7 @@ describe("parseTokenIdFromTransferLogs", () => {
                 ZERO_TOPIC,
                 topicForAddress(OPERATOR),
                 topicForUint(tokenId),
-            ] as const,
+            ],
         };
     }
 
@@ -91,8 +94,8 @@ describe("parseTokenIdFromTransferLogs", () => {
                 {
                     address: REGISTRY,
                     topics: [
-                        "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
-                    ] as const,
+                        "0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef" as Hex,
+                    ],
                 },
             ],
             REGISTRY,
@@ -101,7 +104,8 @@ describe("parseTokenIdFromTransferLogs", () => {
     });
 
     it("ignores Transfer events from other contracts", () => {
-        const otherAddress = "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as const;
+        const otherAddress: `0x${string}` =
+            "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         const tokenId = parseTokenIdFromTransferLogs(
             [mintLog(99n, otherAddress)],
             REGISTRY,
@@ -121,7 +125,7 @@ describe("parseTokenIdFromTransferLogs", () => {
                             "0x2222222222222222222222222222222222222222",
                         ),
                         topicForUint(123n),
-                    ] as const,
+                    ],
                 },
             ],
             REGISTRY,
