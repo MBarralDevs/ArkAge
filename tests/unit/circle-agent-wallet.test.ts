@@ -12,7 +12,7 @@ const { verifyCircleAgentWallet } = await import("@/lib/circle-agent-wallet");
 const SCA = "0x86f97b7afc0b580d342e824084b79ae89993ee77" as const;
 const BACKING_EOA = "0x3d6341f4af5ac687e4acb392bbe4745876ad6231" as const;
 
-function stubListHasWallet(address = SCA) {
+function stubListHasWallet(address: string = SCA) {
     return {
         wallets: [
             {

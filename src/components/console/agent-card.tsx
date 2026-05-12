@@ -7,6 +7,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Address } from "@/components/primitives/address";
+import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
 
 interface Props {
     agentId: string;
@@ -14,6 +15,7 @@ interface Props {
     active: boolean;
     metadata: { name?: string; description?: string } | null;
     feedbackCount: number;
+    custody?: string;
 }
 
 export function AgentCard({
@@ -22,6 +24,7 @@ export function AgentCard({
     active,
     metadata,
     feedbackCount,
+    custody,
 }: Props) {
     return (
         <Link href={`/console/agents/${agentId}`}>
@@ -30,9 +33,12 @@ export function AgentCard({
                     <CardTitle className="text-base">
                         {metadata?.name ?? `Agent #${agentId}`}
                     </CardTitle>
-                    <Badge variant={active ? "default" : "outline"}>
-                        {active ? "active" : "inactive"}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                        {custody && <Tier2KindBadge custody={custody} />}
+                        <Badge variant={active ? "default" : "outline"}>
+                            {active ? "active" : "inactive"}
+                        </Badge>
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-xs">
                     {metadata?.description && (

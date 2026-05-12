@@ -9,10 +9,18 @@ import {
 } from "@/components/ui/card";
 import { Address } from "@/components/primitives/address";
 import { Badge } from "@/components/ui/badge";
+import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
 import { PolicyEditor } from "@/components/console/policy-editor";
 import { RevokeDialog } from "@/components/console/revoke-dialog";
 
 export const dynamic = "force-dynamic";
+
+function maskEmail(email: string): string {
+    const [user, domain] = email.split("@");
+    if (!user || !domain) return email;
+    const visible = user.slice(0, Math.min(4, user.length));
+    return `${visible}${"*".repeat(Math.max(2, user.length - visible.length))}@${domain}`;
+}
 
 export default async function ConsoleAgentDetail({
     params,
@@ -68,15 +76,33 @@ export default async function ConsoleAgentDetail({
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
+                        <Tier2KindBadge
+                            custody={agent.currentOperatorWallet.custody}
+                        />
                         <Badge variant={agent.active ? "default" : "outline"}>
                             {agent.active ? "active" : "inactive"}
                         </Badge>
                         <RevokeDialog agentId={agent.agentId.toString()} />
                     </div>
                 </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">
-                    Policy v{policy?.version ?? "—"} · last updated{" "}
-                    {policy?.createdAt.toLocaleString() ?? "n/a"}
+                <CardContent className="space-y-1 text-sm text-muted-foreground">
+                    <div>
+                        Policy v{policy?.version ?? "—"} · last updated{" "}
+                        {policy?.createdAt.toLocaleString() ?? "n/a"}
+                    </div>
+                    {agent.currentOperatorWallet.custody ===
+                        "circle-agent-wallet" &&
+                        agent.currentOperatorWallet.circleAgentWalletEmail && (
+                            <div className="text-xs">
+                                Controlled by{" "}
+                                <span className="font-mono">
+                                    {maskEmail(
+                                        agent.currentOperatorWallet
+                                            .circleAgentWalletEmail,
+                                    )}
+                                </span>
+                            </div>
+                        )}
                 </CardContent>
             </Card>
 

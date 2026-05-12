@@ -96,6 +96,7 @@ export default async function AgentProfile({
                 }
                 active={agent.active}
                 metadata={m ?? null}
+                custody={agent.currentOperatorWallet.custody}
             />
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

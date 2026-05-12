@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/card";
 import { Address } from "@/components/primitives/address";
 import { Badge } from "@/components/ui/badge";
+import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
 
 interface Props {
     agentId: string;
@@ -18,6 +19,7 @@ interface Props {
         capabilities?: string[];
         version?: string;
     } | null;
+    custody?: string;
 }
 
 export function IdentityCard({
@@ -26,6 +28,7 @@ export function IdentityCard({
     operator,
     active,
     metadata,
+    custody,
 }: Props) {
     return (
         <Card>
@@ -33,9 +36,12 @@ export function IdentityCard({
                 <CardTitle className="text-base">
                     {metadata?.name ?? `Agent #${agentId}`}
                 </CardTitle>
-                <Badge variant={active ? "default" : "outline"}>
-                    {active ? "active" : "inactive"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                    {custody && <Tier2KindBadge custody={custody} />}
+                    <Badge variant={active ? "default" : "outline"}>
+                        {active ? "active" : "inactive"}
+                    </Badge>
+                </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
                 {metadata?.description && (

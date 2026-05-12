@@ -97,7 +97,7 @@ export async function circleCli<T = unknown>(
         child.kill("SIGKILL");
     }, timeoutMs);
 
-    const exitCode: number | null = await new Promise((resolve, reject) => {
+    const exitCode = await new Promise<number | null>((resolve, reject) => {
         child.on("error", reject);
         child.on("close", (code) => resolve(code));
     }).finally(() => clearTimeout(timeoutHandle));
