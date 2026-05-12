@@ -1,6 +1,7 @@
 import type { Address } from "viem";
 import { db } from "./db";
 import type { AgentPolicy } from "./policy-canonical";
+import type { Tier2WalletKind } from "./wallet-router";
 
 /**
  * The single struct every MCP tool gets when it needs to know "who is
@@ -17,6 +18,13 @@ export interface LoadedAgent {
     active: boolean;
     policy: AgentPolicy;
     perTxCap: bigint;
+    /**
+     * Plan E1: the kind of Tier 2 wallet backing this agent. Drives
+     * downstream signing dispatch (DCW/EOA path vs Circle CLI path).
+     * `null` when the wallet row exists but is on an unknown custody
+     * value (defensive — should not happen in practice).
+     */
+    tier2Kind: Tier2WalletKind | null;
 }
 
 export class AgentNotFoundError extends Error {
@@ -63,7 +71,21 @@ export async function loadAgentByDbId(dbId: bigint): Promise<LoadedAgent> {
         active: row.active,
         policy,
         perTxCap: BigInt(policy.spendCaps.perTx),
+        tier2Kind: mapCustodyToTier2Kind(row.currentOperatorWallet.custody),
     };
+}
+
+function mapCustodyToTier2Kind(custody: string): Tier2WalletKind | null {
+    switch (custody) {
+        case "dcw":
+            return "circle-dcw-eoa";
+        case "external-eoa":
+            return "external-eoa";
+        case "circle-agent-wallet":
+            return "circle-agent-wallet";
+        default:
+            return null;
+    }
 }
 
 /** Load an agent by its operator wallet address (case-insensitive). */

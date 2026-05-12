@@ -85,15 +85,28 @@ export async function handlePayAndCall(
             operatorWallet: agent.operatorWallet,
             perTxCap: agent.perTxCap,
             active: agent.active,
+            ...(agent.tier2Kind ? { tier2Kind: agent.tier2Kind } : {}),
         },
     });
     if ("reject" in decision) {
         return err("routing_rejected", decision.reason);
     }
+    // Plan E1: Circle Agent Wallet Tier 2 cannot be signed for from Vercel.
+    // The agent runtime (where `circle wallet login` ran) must run
+    // `circle services pay` itself. Return a structured envelope so the
+    // calling agent can dispatch the right action client-side.
+    if (decision.wallet === "tier2-circle-agent-wallet") {
+        return err(
+            "circle_agent_wallet_run_locally",
+            `This agent is backed by a Circle Agent Wallet. Run this on the machine where you ran \`circle wallet login\`: ` +
+                `circle services pay ${parse.data.url} --address ${agent.operatorWallet} --chain ARC-TESTNET ` +
+                `--max-amount ${parse.data.maxPrice ?? "0.01"} --output json`,
+        );
+    }
     if (decision.wallet !== "tier2-dcw") {
         return err(
             "routing_unexpected",
-            `expected tier2-dcw, got ${decision.wallet}`,
+            `expected tier2-dcw or tier2-circle-agent-wallet, got ${decision.wallet}`,
         );
     }
 

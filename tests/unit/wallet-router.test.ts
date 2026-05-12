@@ -91,4 +91,53 @@ describe("wallet router", () => {
         });
         expect("reject" in decision && decision.reject).toBe(true);
     });
+
+    // Plan E1 — Circle Agent Wallet dispatch
+    describe("tier2Kind dispatch", () => {
+        const circleAgent: AgentRoutingContext = {
+            ...baseAgent,
+            tier2Kind: "circle-agent-wallet",
+        };
+
+        it.each([["post_job"], ["set_budget"], ["submit_work"], ["x402_pay"]] as const)(
+            "routes %s to tier2-circle-agent-wallet when tier2Kind is circle-agent-wallet",
+            (kind) => {
+                const decision = route({ kind, agent: circleAgent });
+                expect("wallet" in decision && decision.wallet).toBe(
+                    "tier2-circle-agent-wallet",
+                );
+            },
+        );
+
+        it("routes within-cap fund_job to tier2-circle-agent-wallet for Circle Agent Wallet agents", () => {
+            const decision = route({
+                kind: "fund_job",
+                amount: 500_000n,
+                agent: circleAgent,
+            });
+            expect("wallet" in decision && decision.wallet).toBe(
+                "tier2-circle-agent-wallet",
+            );
+        });
+
+        it("still escalates over-cap fund_job to Tier 1 for Circle Agent Wallet agents", () => {
+            const decision = route({
+                kind: "fund_job",
+                amount: 2_000_000n,
+                agent: circleAgent,
+            });
+            expect("wallet" in decision && decision.wallet).toBe("tier1-modular");
+        });
+
+        it.each([
+            ["circle-dcw-eoa"] as const,
+            ["external-eoa"] as const,
+        ])("routes Tier 2 to tier2-dcw when tier2Kind is %s", (kind) => {
+            const decision = route({
+                kind: "post_job",
+                agent: { ...baseAgent, tier2Kind: kind },
+            });
+            expect("wallet" in decision && decision.wallet).toBe("tier2-dcw");
+        });
+    });
 });

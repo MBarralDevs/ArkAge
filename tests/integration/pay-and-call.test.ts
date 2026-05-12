@@ -38,6 +38,7 @@ vi.mock("@/lib/agent-loader", () => ({
         operatorWallet: "0x1111000000000000000000000000000000000001",
         identityOwner: "0x9999000000000000000000000000000000000009",
         active: true,
+        tier2Kind: "circle-dcw-eoa",
         policy: {
             schemaVersion: 1,
             agentId: "100",
@@ -69,10 +70,6 @@ vi.mock("@/lib/agent-loader", () => ({
 
 vi.mock("@/lib/policy-engine", () => ({
     evaluatePolicy: vi.fn(async () => ({ ok: true })),
-}));
-
-vi.mock("@/lib/wallet-router", () => ({
-    route: vi.fn(() => ({ wallet: "tier2-dcw" })),
 }));
 
 vi.mock("@/lib/db", () => {
@@ -134,6 +131,68 @@ describe("pay_and_call", () => {
             expect(result.data.amountPaid).toBe("1000");
             expect(result.data.receiptId).toBe("7");
             expect(result.data.sessionId).toBe("1");
+        }
+    });
+
+    it("returns circle_agent_wallet_run_locally envelope for Circle Agent Wallet-backed agents", async () => {
+        const loaderMod = await import("@/lib/agent-loader");
+        (
+            loaderMod.loadAgentByDbId as ReturnType<typeof vi.fn>
+        ).mockResolvedValueOnce({
+            dbId: 1n,
+            agentId: 100n,
+            operatorWallet: "0x86f97b7afc0b580d342e824084b79ae89993ee77",
+            identityOwner: "0x9999000000000000000000000000000000000009",
+            active: true,
+            tier2Kind: "circle-agent-wallet",
+            policy: {
+                schemaVersion: 1,
+                agentId: "100",
+                version: 1,
+                validFrom: 0,
+                validTo: null,
+                spendCaps: { perTx: "10000", perDay: "100000", perWeek: "700000" },
+                allowedContracts: [],
+                allowedSelectors: [],
+                counterpartyRules: {
+                    minReputation: null,
+                    allowList: [],
+                    denyList: [],
+                },
+                rateLimits: { jobsPerHour: 10, x402CallsPerMinute: 60 },
+                tokens: ["0x3600000000000000000000000000000000000000"],
+                evaluatorPreferences: {
+                    defaultTier: "standard",
+                    maxFeePerJob: "1000000",
+                },
+            },
+            perTxCap: 10000n,
+        });
+
+        const result = await handlePayAndCall(
+            {
+                asAgent: "1",
+                url: "https://arkage-zeta.vercel.app/api/x402-proxy/2",
+                maxPrice: "5000",
+                idempotencyKey: "pc-circle-1",
+            },
+            {
+                token: "arkage_" + "0".repeat(64),
+                builderId: 1n,
+                actingAgentId: 1n,
+                actingWalletAddress:
+                    "0x86f97b7afc0b580d342e824084b79ae89993ee77",
+            },
+        );
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.code).toBe("circle_agent_wallet_run_locally");
+            expect(result.message).toMatch(/circle services pay/);
+            expect(result.message).toMatch(/ARC-TESTNET/);
+            expect(result.message).toMatch(
+                /0x86f97b7afc0b580d342e824084b79ae89993ee77/,
+            );
         }
     });
 });

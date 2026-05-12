@@ -6,12 +6,13 @@
  * have to. Adding a new tool = one new line here.
  */
 
-// --- Identity domain (5 tools) ---
+// --- Identity domain (6 tools — register-agent-wallet added in Plan E1) ---
 import "./tools/identity/bootstrap-user";
 import "./tools/identity/get-agent-info";
 import "./tools/identity/get-my-agents";
 import "./tools/identity/update-agent-metadata";
 import "./tools/identity/revoke-agent";
+import "./tools/identity/register-agent-wallet";
 
 // --- Jobs domain (9 tools) ---
 import "./tools/jobs/post-job";

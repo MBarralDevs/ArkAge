@@ -23,7 +23,9 @@
     "db:format": "dotenv -e .env.local -- prisma format",
     "bootstrap:tier3": "dotenv -e .env.local -- tsx scripts/bootstrap-tier3-wallets.ts",
     "smoke:issue-token": "dotenv -e .env.local -- tsx scripts/smoke-issue-token.ts",
-    "smoke:register-tier2": "dotenv -e .env.local -- tsx scripts/smoke-register-external-tier2.ts"
+    "smoke:register-tier2": "dotenv -e .env.local -- tsx scripts/smoke-register-external-tier2.ts",
+    "smoke:register-seller": "dotenv -e .env.local -- tsx scripts/smoke-register-seller-agent.ts",
+    "smoke:register-circle-agent": "dotenv -e .env.local -- tsx scripts/smoke-register-circle-agent.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

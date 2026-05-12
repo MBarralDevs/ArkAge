@@ -31,20 +31,58 @@ import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
  * tx envelopes the human signs via passkey.
  */
 
-const Input = z.object({
-    mode: z.enum(["passkey-builder+dcw-agent", "dcw-only", "passkey-only"]),
-    agentMetadata: z.object({
-        name: z.string().min(1),
-        description: z.string(),
-        capabilities: z.array(z.string()),
-        version: z.string(),
-    }),
-    builderPrimaryWallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
-    displayName: z.string().optional(),
-    initialPolicy: z.unknown().optional(),
-    evaluatorTier: z.enum(["fast", "standard", "premium"]).default("standard"),
-    idempotencyKey: z.string().min(1),
-});
+const HEX_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const Input = z
+    .object({
+        // Plan E1: passkey-builder+circle-agent-wallet skips Circle DCW
+        // provisioning and registers a pre-existing Circle Agent Wallet SCA
+        // (provisioned by the builder's local `circle wallet login`) as Tier 2.
+        mode: z.enum([
+            "passkey-builder+dcw-agent",
+            "passkey-builder+circle-agent-wallet",
+            "dcw-only",
+            "passkey-only",
+        ]),
+        agentMetadata: z.object({
+            name: z.string().min(1),
+            description: z.string(),
+            capabilities: z.array(z.string()),
+            version: z.string(),
+        }),
+        builderPrimaryWallet: z.string().regex(HEX_ADDRESS),
+        displayName: z.string().optional(),
+        initialPolicy: z.unknown().optional(),
+        evaluatorTier: z.enum(["fast", "standard", "premium"]).default("standard"),
+        idempotencyKey: z.string().min(1),
+        /**
+         * Required when mode = passkey-builder+circle-agent-wallet. The
+         * SCA address comes from `circle wallet list --type agent`; the
+         * email is whatever the builder used for `circle wallet login`;
+         * the backing EOA is read from `circle gateway balance`.
+         */
+        circleAgentWallet: z
+            .object({
+                address: z.string().regex(HEX_ADDRESS),
+                email: z.string().regex(EMAIL),
+                backingEoa: z.string().regex(HEX_ADDRESS),
+            })
+            .optional(),
+    })
+    .superRefine((val, ctx) => {
+        if (
+            val.mode === "passkey-builder+circle-agent-wallet" &&
+            !val.circleAgentWallet
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["circleAgentWallet"],
+                message:
+                    "circleAgentWallet is required when mode=passkey-builder+circle-agent-wallet",
+            });
+        }
+    });
 
 type BootstrapInput = z.infer<typeof Input>;
 
@@ -57,6 +95,8 @@ interface BootstrapOutput {
     policyHash: `0x${string}`;
     pendingActions: PendingTier1Signature[];
     gatewayDepositTx: `0x${string}` | null;
+    /** Human-readable follow-up steps (e.g. CLI commands the builder needs to run). */
+    instructions: string[];
 }
 
 function defaultPolicy(
@@ -123,7 +163,49 @@ export async function handleBootstrapUser(
         }
     }
 
-    const tier2 = await provisionTier2DcwForBuilder(builder.id);
+    const instructions: string[] = [];
+    let tier2Address: Address;
+
+    if (input.mode === "passkey-builder+circle-agent-wallet") {
+        const cw = input.circleAgentWallet!;
+        const tier2Bytes = Buffer.from(
+            cw.address.toLowerCase().replace(/^0x/, ""),
+            "hex",
+        );
+        const existing = await db.wallet.findUnique({
+            where: { address: tier2Bytes },
+        });
+        if (!existing) {
+            await db.wallet.create({
+                data: {
+                    address: tier2Bytes,
+                    tier: 2,
+                    custody: "circle-agent-wallet",
+                    accountType: "sca",
+                    builderId: builder.id,
+                    circleAgentWalletEmail: cw.email,
+                    circleBackingEoa: Buffer.from(
+                        cw.backingEoa.toLowerCase().replace(/^0x/, ""),
+                        "hex",
+                    ),
+                },
+            });
+        }
+        tier2Address = cw.address as Address;
+        // Gateway deposit happens on the builder's machine, not here, because
+        // the Circle CLI session lives there. Tell the builder what to run.
+        instructions.push(
+            "Deposit USDC into Circle Gateway from your machine: " +
+                `circle gateway deposit --amount 1 --address ${cw.address} ` +
+                `--chain ARC-TESTNET --method direct --output json`,
+            "Then use `circle services pay <ArkAge-x402-endpoint-url> " +
+                `--address ${cw.address} --chain ARC-TESTNET --max-amount X` +
+                "` from your agent runtime to pay x402 endpoints.",
+        );
+    } else {
+        const tier2 = await provisionTier2DcwForBuilder(builder.id);
+        tier2Address = tier2.address;
+    }
 
     const policy = defaultPolicy(`pending:${builder.id}`, input.evaluatorTier);
     const policyHash = hashPolicy(policy);
@@ -141,17 +223,18 @@ export async function handleBootstrapUser(
         },
     });
 
-    // Best-effort one-time Gateway deposit for the new Tier 2 EOA.
-    // Reads the env-staged testnet key (ARKAGE_TIER2_KEY_<walletId>);
-    // mainnet path graduates to a DCW signTypedData bridge per LBC-1.
-    // Silently skipped when the wallet row isn't visible yet (e.g.,
-    // when `provisionTier2DcwForBuilder` is mocked in tests).
+    // Best-effort one-time Gateway deposit for the new Tier 2 EOA — only for
+    // Circle-DCW-backed flows. The Circle-Agent-Wallet path skips this entirely
+    // (deposit happens via the builder's local `circle` CLI; see instructions).
     let gatewayDepositTx: `0x${string}` | null = null;
-    if (input.mode !== "passkey-only") {
+    if (
+        input.mode !== "passkey-only" &&
+        input.mode !== "passkey-builder+circle-agent-wallet"
+    ) {
         const tier2Wallet = await db.wallet.findUnique({
             where: {
                 address: Buffer.from(
-                    tier2.address.replace(/^0x/, ""),
+                    tier2Address.replace(/^0x/, ""),
                     "hex",
                 ),
             },
@@ -205,11 +288,12 @@ export async function handleBootstrapUser(
         builderId: String(builder.id),
         builderWalletAddress: input.builderPrimaryWallet as Address,
         agentIdentityId: null,
-        agentOperatorWallet: tier2.address,
+        agentOperatorWallet: tier2Address,
         policyVersion: policy.version,
         policyHash,
         pendingActions,
         gatewayDepositTx,
+        instructions,
     });
 }
 
@@ -222,7 +306,12 @@ registerTool({
         properties: {
             mode: {
                 type: "string",
-                enum: ["passkey-builder+dcw-agent", "dcw-only", "passkey-only"],
+                enum: [
+                    "passkey-builder+dcw-agent",
+                    "passkey-builder+circle-agent-wallet",
+                    "dcw-only",
+                    "passkey-only",
+                ],
             },
             builderPrimaryWallet: { type: "string" },
             displayName: { type: "string" },
@@ -236,6 +325,15 @@ registerTool({
                     capabilities: { type: "array" },
                     version: { type: "string" },
                 },
+            },
+            circleAgentWallet: {
+                type: "object",
+                properties: {
+                    address: { type: "string" },
+                    email: { type: "string" },
+                    backingEoa: { type: "string" },
+                },
+                required: ["address", "email", "backingEoa"],
             },
         },
         required: ["mode", "builderPrimaryWallet", "agentMetadata", "idempotencyKey"],

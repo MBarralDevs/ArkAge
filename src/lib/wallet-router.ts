@@ -17,13 +17,34 @@ import type { Address } from "viem";
  *  - Circle Gateway top-ups → Tier 3 gas-funder
  *  - fund_job: Tier 2 if within per-tx cap, Tier 1 if over
  *  - Everyday agent ops (post/accept/submit/x402-pay) → Tier 2
+ *
+ * Tier 2 kind dispatch (Plan E1):
+ *  - "circle-dcw-eoa" or "external-eoa" (or undefined for back-compat)
+ *    → "tier2-dcw" tag; signing via `signWithTier2` in tier2-dcw.ts.
+ *  - "circle-agent-wallet" → "tier2-circle-agent-wallet" tag; signing
+ *    happens outside ArkAge via the builder's local `circle` CLI session
+ *    (no in-process signing path on Vercel functions).
  */
+
+/**
+ * Mirrors `wallets.custody` values that can serve as Tier 2 for an agent.
+ * Tier 1 ('modular') and Tier 3 ('system') are not valid Tier 2 kinds.
+ */
+export type Tier2WalletKind =
+    | "circle-dcw-eoa"
+    | "external-eoa"
+    | "circle-agent-wallet";
 
 export interface AgentRoutingContext {
     agentId: bigint;
     operatorWallet: Address;
     perTxCap: bigint;
     active: boolean;
+    /**
+     * Underlying implementation of the agent's Tier 2 wallet. Optional for
+     * back-compat: omitted → treated as "circle-dcw-eoa" (the v1 default).
+     */
+    tier2Kind?: Tier2WalletKind;
 }
 
 export type IdentityOpSubject =
@@ -48,10 +69,17 @@ export type RoutingAction =
 export type RoutingDecision =
     | { wallet: "tier1-modular"; reason: string }
     | { wallet: "tier2-dcw" }
+    | { wallet: "tier2-circle-agent-wallet" }
     | { wallet: "tier3-validator" }
     | { wallet: "tier3-treasury" }
     | { wallet: "tier3-gas-funder" }
     | { reject: true; reason: string };
+
+function tier2Decision(agent: AgentRoutingContext): RoutingDecision {
+    return agent.tier2Kind === "circle-agent-wallet"
+        ? { wallet: "tier2-circle-agent-wallet" }
+        : { wallet: "tier2-dcw" };
+}
 
 export function route(action: RoutingAction): RoutingDecision {
     if (!action.agent.active) {
@@ -71,11 +99,11 @@ export function route(action: RoutingAction): RoutingDecision {
             if (action.amount > action.agent.perTxCap) {
                 return { wallet: "tier1-modular", reason: "amount exceeds per-tx cap" };
             }
-            return { wallet: "tier2-dcw" };
+            return tier2Decision(action.agent);
         case "post_job":
         case "set_budget":
         case "submit_work":
         case "x402_pay":
-            return { wallet: "tier2-dcw" };
+            return tier2Decision(action.agent);
     }
 }

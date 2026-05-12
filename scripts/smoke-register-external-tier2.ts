@@ -1,4 +1,16 @@
 /**
+ * **DEPRECATED (Plan E1, 2026-05-12).** Prefer `smoke:register-circle-agent`
+ * for new agents — it registers a Circle Agent Wallet SCA as Tier 2 with no
+ * private-key staging anywhere on ArkAge's side. See:
+ *   - `scripts/smoke-register-circle-agent.ts`
+ *   - `docs/runbooks/circle-agent-wallet-onboarding.md`
+ *
+ * This script is kept only for v1 agents that already have an
+ * `ARKAGE_TIER2_KEY_<walletId>` env var staged. New agents should NOT use
+ * it. The env-staged-key path will be removed in v2.
+ *
+ * ---
+ *
  * Smoke prep for Plan D Phase B: register a user-supplied EOA as a
  * Tier 2 wallet + create an `agents` row + initial policy in one go.
  *

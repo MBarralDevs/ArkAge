@@ -42,10 +42,14 @@ These are load-bearing. Don't change them without re-reading the spec.
 
 ### Wallet tiers (spec §5)
 - **Tier 1** — Builder's Circle Modular Wallet (passkey, MSCA). Owns ERC-8004 NFTs. Non-custodial. Used for identity ops, high-value tx, policy issuance, recovery.
-- **Tier 2** — Agent's Circle DCW in **EOA mode**. Custodial within policy. **MUST be EOA** because Circle Gateway nanopayments verify via `ecrecover` and don't support EIP-1271 contract signatures (LBC-1 from spec research).
+- **Tier 2** — One of three flavours (v1.5 Plan E1):
+    - **Circle Agent Wallet (SCA, recommended for new agents)** — auto-provisioned by `circle wallet login`, MPC-backed, paired with an internal backing EOA that signs EIP-3009 authorizations. ArkAge never holds the session — the agent runtime spawns `circle` locally. See [`docs/runbooks/circle-agent-wallet-onboarding.md`](docs/runbooks/circle-agent-wallet-onboarding.md).
+    - **Circle DCW in EOA mode** — v1 default. Custodial within policy. EIP-3009 signing path keyed by env-staged `ARKAGE_TIER2_KEY_<walletId>`. Existing agents still work; new agents should prefer Circle Agent Wallets.
+    - **External EOA** (bring-your-own) — same env-staged-key path as Circle DCW EOA. Also deprecated for new agents.
+  Original LBC-1 (Tier 2 must be EOA) is dissolved by Circle Agent Wallets: the SCA is the user-facing address, but signing routes through the backing EOA, which is ecrecover-compatible.
 - **Tier 3** — ArkAge system wallets (validator, treasury, gas-funder). Internal.
 
-Routing rules live in `src/lib/wallet-router.ts` and are mirrored on-chain by `PolicyHook`. **Both must approve** any action.
+Routing rules live in `src/lib/wallet-router.ts` and are mirrored on-chain by `PolicyHook`. **Both must approve** any action. The router branches on `tier2Kind` (`"circle-dcw-eoa" | "external-eoa" | "circle-agent-wallet"`) to dispatch signing correctly.
 
 ### Hook contract invariant (Risk #1)
 The 5 hook/registry contracts MUST never own or be approved-operator of any ERC-8004 identity NFT. This is what keeps `ReputationHook.giveFeedback` ERC-8004-compliant. Foundry invariant test enforces it.
@@ -324,7 +328,9 @@ The Vercel Plugin's post-tool-use validator pattern-matches `setTimeout`/`setInt
 
 ## v1.5 / v2 backlog (don't lose these)
 
-- **ERC-7710 session keys** to replace Tier 2 DCW custody — primary v1.5 milestone, eliminates the v1 custody trade entirely
+**v1.5 status (2026-05-12):** Plan E (`docs/superpowers/plans/2026-05-11-plan-e-v1.5-circle-agent-stack-integration.md`) drafted after Circle's Agent Stack launch. Plan E1 (Circle Agent Wallets onramp) executing — Tasks 1-8, 11, 13-15 done; Tasks 9-10 (console UI) deferred; Task 12 (settled-payment smoke) gated on a Circle CLI v0.0.1 bug that always reports "deposit balance is 0" on Arc Testnet (bug reported to Circle).
+
+- ~~ERC-7710 session keys~~ — **on ice.** Circle Agent Wallets do not currently ship session keys; revisit when Circle does. The Plan E1 onramp removes ArkAge's session-control risk anyway (ArkAge structurally cannot hold a Circle CLI session).
 - **Provider stuck-job insurance pool** — eats stranded-provider risk
 - **Safe-as-Tier-1** for teams/DAOs operating shared agents
 - **ZeroDev Kernel** as alternative AA stack (production session keys today)
