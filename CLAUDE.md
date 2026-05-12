@@ -328,7 +328,10 @@ The Vercel Plugin's post-tool-use validator pattern-matches `setTimeout`/`setInt
 
 ## v1.5 / v2 backlog (don't lose these)
 
-**v1.5 status (2026-05-12):** Plan E (`docs/superpowers/plans/2026-05-11-plan-e-v1.5-circle-agent-stack-integration.md`) drafted after Circle's Agent Stack launch. Plan E1 (Circle Agent Wallets onramp) executing — Tasks 1-8, 11, 13-15 done; Tasks 9-10 (console UI) deferred; Task 12 (settled-payment smoke) gated on a Circle CLI v0.0.1 bug that always reports "deposit balance is 0" on Arc Testnet (bug reported to Circle).
+**v1.5 status (2026-05-12):** Plan E (`docs/superpowers/plans/2026-05-11-plan-e-v1.5-circle-agent-stack-integration.md`) drafted after Circle's Agent Stack launch. Two themes executed:
+
+- **Theme A (Plan E1 — Circle Agent Wallets onramp):** all 15 tasks shipped, end-to-end UI verified. Builders can register a Circle Agent Wallet SCA as Tier 2 from the console at `/console/agents/new`. Task 12 (settled-payment smoke) gated on a Circle CLI v0.0.1 bug that always reports "deposit balance is 0" on Arc Testnet — reported to Circle Discord, awaiting fix.
+- **Theme B (Plan E2 — on-chain ERC-8004 + AgentRegistry registration):** data, ABIs, 3 MCP tools, smoke script, agent profile badge surface all shipped. Smoke verified live on 2026-05-12: agent dbId 16 anchored at IdentityRegistry token #5285, AgentRegistry binding active, both tx receipts confirmed. Phase 3 (dashboard mint-flow UI) deferred. Runbook: `docs/runbooks/agent-onchain-registration.md`.
 
 - ~~ERC-7710 session keys~~ — **on ice.** Circle Agent Wallets do not currently ship session keys; revisit when Circle does. The Plan E1 onramp removes ArkAge's session-control risk anyway (ArkAge structurally cannot hold a Circle CLI session).
 - **Provider stuck-job insurance pool** — eats stranded-provider risk

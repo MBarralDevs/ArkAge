@@ -10,6 +10,7 @@ import {
 import { Address } from "@/components/primitives/address";
 import { Badge } from "@/components/ui/badge";
 import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
+import { OnchainAnchorBadge } from "@/components/primitives/onchain-anchor-badge";
 import { PolicyEditor } from "@/components/console/policy-editor";
 import { RevokeDialog } from "@/components/console/revoke-dialog";
 
@@ -75,7 +76,11 @@ export default async function ConsoleAgentDetail({
                             />
                         </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <OnchainAnchorBadge
+                            chainAgentId={agent.chainAgentId}
+                            identityTxHash={agent.identityRegisterTxHash}
+                        />
                         <Tier2KindBadge
                             custody={agent.currentOperatorWallet.custody}
                         />

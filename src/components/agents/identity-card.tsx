@@ -7,6 +7,7 @@ import {
 import { Address } from "@/components/primitives/address";
 import { Badge } from "@/components/ui/badge";
 import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
+import { OnchainAnchorBadge } from "@/components/primitives/onchain-anchor-badge";
 
 interface Props {
     agentId: string;
@@ -20,6 +21,9 @@ interface Props {
         version?: string;
     } | null;
     custody?: string;
+    /** Plan E2 — non-null when the agent has an ERC-8004 IdentityRegistry token. */
+    chainAgentId?: bigint | null;
+    identityRegisterTxHash?: Uint8Array | null;
 }
 
 export function IdentityCard({
@@ -29,6 +33,8 @@ export function IdentityCard({
     active,
     metadata,
     custody,
+    chainAgentId,
+    identityRegisterTxHash,
 }: Props) {
     return (
         <Card>
@@ -36,7 +42,11 @@ export function IdentityCard({
                 <CardTitle className="text-base">
                     {metadata?.name ?? `Agent #${agentId}`}
                 </CardTitle>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                    <OnchainAnchorBadge
+                        chainAgentId={chainAgentId ?? null}
+                        identityTxHash={identityRegisterTxHash ?? null}
+                    />
                     {custody && <Tier2KindBadge custody={custody} />}
                     <Badge variant={active ? "default" : "outline"}>
                         {active ? "active" : "inactive"}
