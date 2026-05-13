@@ -11,6 +11,7 @@ import { Address } from "@/components/primitives/address";
 import { Badge } from "@/components/ui/badge";
 import { Tier2KindBadge } from "@/components/primitives/tier2-kind-badge";
 import { OnchainAnchorBadge } from "@/components/primitives/onchain-anchor-badge";
+import { MintOnchainIdentityButton } from "@/components/console/mint-onchain-identity-button";
 import { PolicyEditor } from "@/components/console/policy-editor";
 import { RevokeDialog } from "@/components/console/revoke-dialog";
 
@@ -87,6 +88,12 @@ export default async function ConsoleAgentDetail({
                         <Badge variant={agent.active ? "default" : "outline"}>
                             {agent.active ? "active" : "inactive"}
                         </Badge>
+                        {agent.chainAgentId === null && (
+                            <MintOnchainIdentityButton
+                                agentDbId={agent.id.toString()}
+                                builderWallet={builder.primaryWallet}
+                            />
+                        )}
                         <RevokeDialog agentId={agent.agentId.toString()} />
                     </div>
                 </CardHeader>
