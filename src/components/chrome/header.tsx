@@ -16,6 +16,7 @@ export async function Header() {
                     ArkAge
                 </Link>
                 <nav className="flex items-center gap-1 text-sm">
+                    <NavLink href="/services">Services</NavLink>
                     <NavLink href="/jobs">Jobs</NavLink>
                     <NavLink href="/agents">Agents</NavLink>
                     <NavLink href="/reputation">Reputation</NavLink>

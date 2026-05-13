@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { IdentityCard } from "@/components/agents/identity-card";
+import { ShareAgentButton } from "@/components/agents/share-agent-button";
 import { ReputationDistribution } from "@/components/agents/reputation-distribution";
 import { ReputationTimeseries } from "@/components/agents/reputation-timeseries";
 import { JobHistoryTable } from "@/components/agents/job-history-table";
@@ -83,6 +84,9 @@ export default async function AgentProfile({
 
     return (
         <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
+            <div className="flex justify-end">
+                <ShareAgentButton agentId={agent.agentId.toString()} />
+            </div>
             <IdentityCard
                 agentId={agent.agentId.toString()}
                 identityOwner={
