@@ -35,6 +35,8 @@ export interface ServiceListing {
     };
     /** Min / max price across all the agent's active endpoints, in raw USDC (6 decimals). */
     priceRange: { minRaw: string; maxRaw: string };
+    /** Plan E.1 phase 1: dispute exposure surfaced in the catalog for at-a-glance trust signal. */
+    disputes: { total: number; open: number };
 }
 
 export interface ServiceEndpoint {
@@ -98,6 +100,42 @@ export async function loadServiceCatalog(
         });
     }
 
+    // Plan E.1 — dispute exposure rollup, also one query for the whole
+    // catalog. Counts disputes where the agent is either the buyer or
+    // seller on the underlying session.
+    const disputeRows =
+        agentIds.length === 0
+            ? []
+            : await db.$queryRaw<
+                  Array<{
+                      agent_id: bigint;
+                      total: number;
+                      open: number;
+                  }>
+              >`
+                SELECT s.agent_id, COUNT(*)::int AS total,
+                       COUNT(*) FILTER (WHERE d.status = 'open')::int AS open
+                FROM x402_disputes d
+                JOIN x402_receipts r ON r.id = d.receipt_id
+                JOIN (
+                    SELECT id, buyer_agent_id AS agent_id FROM x402_sessions
+                    UNION ALL
+                    SELECT id, seller_agent_id AS agent_id FROM x402_sessions
+                ) s ON s.id = r.session_id
+                WHERE s.agent_id = ANY(${agentIds}::bigint[])
+                GROUP BY s.agent_id
+              `;
+    const disputesByAgent = new Map<
+        string,
+        { total: number; open: number }
+    >();
+    for (const row of disputeRows) {
+        disputesByAgent.set(row.agent_id.toString(), {
+            total: row.total,
+            open: row.open,
+        });
+    }
+
     return agents.map((a) => {
         const meta = a.metadata[0]?.metadataJsonb as
             | {
@@ -128,6 +166,10 @@ export async function loadServiceCatalog(
             : ZERO_RAW;
 
         const rep = repByAgent.get(a.id.toString());
+        const disputes = disputesByAgent.get(a.id.toString()) ?? {
+            total: 0,
+            open: 0,
+        };
 
         return {
             agentId: a.agentId.toString(),
@@ -151,6 +193,7 @@ export async function loadServiceCatalog(
                 averageScore: rep?.avg ?? null,
             },
             priceRange: { minRaw: minPrice, maxRaw: maxPrice },
+            disputes,
         };
     });
 }

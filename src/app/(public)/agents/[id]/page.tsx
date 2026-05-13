@@ -9,7 +9,9 @@ import { ReputationFreshnessBadge } from "@/components/agents/reputation-freshne
 import { ReputationDiversityBadge } from "@/components/agents/reputation-diversity-badge";
 import { JobHistoryTable } from "@/components/agents/job-history-table";
 import { X402EndpointsList } from "@/components/agents/x402-endpoints-list";
+import { DisputesSection } from "@/components/agents/disputes-section";
 import { loadAgentReputation } from "@/lib/reputation-stats";
+import { loadAgentDisputes } from "@/lib/disputes-stats";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +33,10 @@ export default async function AgentProfile({
     });
     if (!agent) notFound();
 
-    const stats = await loadAgentReputation(agent.id);
+    const [stats, disputeStats] = await Promise.all([
+        loadAgentReputation(agent.id),
+        loadAgentDisputes(agent.id),
+    ]);
 
     const [asClient, asProvider] = await Promise.all([
         db.job.findMany({
@@ -104,6 +109,8 @@ export default async function AgentProfile({
             </div>
 
             <ReputationByEvaluator rows={stats.byEvaluator} />
+
+            <DisputesSection stats={disputeStats} />
 
             <JobHistoryTable
                 asClient={asClient.map((j) => ({

@@ -57,6 +57,16 @@ export function ServiceCard({ service }: { service: ServiceListing }) {
                                 No endpoints yet
                             </Badge>
                         )}
+                        {service.disputes.open > 0 && (
+                            <Badge
+                                variant="outline"
+                                className="text-[10px]"
+                                title={`${service.disputes.open} open dispute${service.disputes.open === 1 ? "" : "s"} (total ${service.disputes.total})`}
+                            >
+                                ⚠ {service.disputes.open} open dispute
+                                {service.disputes.open === 1 ? "" : "s"}
+                            </Badge>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-3 text-xs">

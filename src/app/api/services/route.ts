@@ -54,7 +54,7 @@ const IDENTITY_REGISTRY_ADDRESS = "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 export async function GET(): Promise<Response> {
     const services = await loadServiceCatalog(200);
     const body = {
-        version: "1.0",
+        version: "1.1",
         generatedAt: new Date().toISOString(),
         count: services.length,
         services: services.map((s) => ({
@@ -76,6 +76,7 @@ export async function GET(): Promise<Response> {
                     : null,
             endpoints: s.endpoints,
             reputation: s.reputation,
+            disputes: s.disputes,
         })),
     };
     return NextResponse.json(body, {
