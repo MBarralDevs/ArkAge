@@ -4,23 +4,14 @@ import { IdentityCard } from "@/components/agents/identity-card";
 import { ShareAgentButton } from "@/components/agents/share-agent-button";
 import { ReputationDistribution } from "@/components/agents/reputation-distribution";
 import { ReputationTimeseries } from "@/components/agents/reputation-timeseries";
+import { ReputationByEvaluator } from "@/components/agents/reputation-by-evaluator";
+import { ReputationFreshnessBadge } from "@/components/agents/reputation-freshness-badge";
+import { ReputationDiversityBadge } from "@/components/agents/reputation-diversity-badge";
 import { JobHistoryTable } from "@/components/agents/job-history-table";
 import { X402EndpointsList } from "@/components/agents/x402-endpoints-list";
+import { loadAgentReputation } from "@/lib/reputation-stats";
 
 export const dynamic = "force-dynamic";
-
-function bucketize(scores: number[]): Array<{ bucket: string; count: number }> {
-    const buckets = ["≤-50", "-49…-1", "0", "1…49", "50…100"];
-    const counts = [0, 0, 0, 0, 0];
-    for (const s of scores) {
-        if (s <= -50) counts[0]!++;
-        else if (s < 0) counts[1]!++;
-        else if (s === 0) counts[2]!++;
-        else if (s < 50) counts[3]!++;
-        else counts[4]!++;
-    }
-    return buckets.map((b, i) => ({ bucket: b, count: counts[i]! }));
-}
 
 export default async function AgentProfile({
     params,
@@ -35,28 +26,12 @@ export default async function AgentProfile({
         include: {
             currentOperatorWallet: true,
             metadata: { orderBy: { createdAt: "desc" }, take: 1 },
-            reputationFeedback: { orderBy: { createdAt: "asc" } },
             x402Endpoints: { where: { active: true } },
         },
     });
     if (!agent) notFound();
 
-    const scores = agent.reputationFeedback.map((r) => r.score ?? 0);
-    const series = agent.reputationFeedback.reduce<
-        { ts: string; score: number; running: number; n: number }[]
-    >((acc, r) => {
-        const last = acc[acc.length - 1];
-        const n = (last?.n ?? 0) + 1;
-        const running =
-            ((last?.running ?? 0) * (n - 1) + (r.score ?? 0)) / n;
-        acc.push({
-            ts: r.createdAt.toISOString(),
-            score: Math.round(running * 10) / 10,
-            running,
-            n,
-        });
-        return acc;
-    }, []);
+    const stats = await loadAgentReputation(agent.id);
 
     const [asClient, asProvider] = await Promise.all([
         db.job.findMany({
@@ -105,12 +80,30 @@ export default async function AgentProfile({
                 identityRegisterTxHash={agent.identityRegisterTxHash}
             />
 
+            <section className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <span>Trust signals:</span>
+                <ReputationFreshnessBadge freshness={stats.freshness} />
+                <ReputationDiversityBadge diversity={stats.diversity} />
+                <span className="ml-2">
+                    {stats.total} feedback event
+                    {stats.total === 1 ? "" : "s"}
+                    {stats.averageScore != null
+                        ? ` · avg ${stats.averageScore.toFixed(2)}`
+                        : ""}
+                </span>
+            </section>
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <ReputationDistribution data={bucketize(scores)} />
+                <ReputationDistribution data={stats.distribution} />
                 <ReputationTimeseries
-                    data={series.map((s) => ({ ts: s.ts, score: s.score }))}
+                    data={stats.timeseries.map((s) => ({
+                        ts: s.ts,
+                        score: s.runningAverage,
+                    }))}
                 />
             </div>
+
+            <ReputationByEvaluator rows={stats.byEvaluator} />
 
             <JobHistoryTable
                 asClient={asClient.map((j) => ({
