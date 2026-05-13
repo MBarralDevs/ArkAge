@@ -17,11 +17,13 @@ import { rawUsdcToUsd, type ServiceListing } from "@/lib/services-catalog";
  * concrete buy signals (price range, endpoint count, reputation).
  */
 export function ServiceCard({ service }: { service: ServiceListing }) {
+    const hasEndpoints = service.endpoints.length > 0;
     const { minRaw, maxRaw } = service.priceRange;
-    const priceLabel =
-        minRaw === maxRaw
-            ? rawUsdcToUsd(minRaw)
-            : `${rawUsdcToUsd(minRaw)} – ${rawUsdcToUsd(maxRaw)}`;
+    const priceLabel = !hasEndpoints
+        ? "Profile only"
+        : minRaw === maxRaw
+          ? rawUsdcToUsd(minRaw)
+          : `${rawUsdcToUsd(minRaw)} – ${rawUsdcToUsd(maxRaw)}`;
 
     const chainAgentIdBig = service.chainAgentId
         ? BigInt(service.chainAgentId)
@@ -45,10 +47,16 @@ export function ServiceCard({ service }: { service: ServiceListing }) {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <Tier2KindBadge custody={service.custody} />
-                        <Badge variant="secondary" className="text-xs">
-                            {service.endpoints.length} endpoint
-                            {service.endpoints.length === 1 ? "" : "s"}
-                        </Badge>
+                        {hasEndpoints ? (
+                            <Badge variant="secondary" className="text-xs">
+                                {service.endpoints.length} endpoint
+                                {service.endpoints.length === 1 ? "" : "s"}
+                            </Badge>
+                        ) : (
+                            <Badge variant="outline" className="text-xs">
+                                No endpoints yet
+                            </Badge>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-3 text-xs">

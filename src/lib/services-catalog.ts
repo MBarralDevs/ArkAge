@@ -56,10 +56,17 @@ const ZERO_RAW = "0";
 export async function loadServiceCatalog(
     limit = 100,
 ): Promise<ServiceListing[]> {
+    // Surface every active agent that's either (a) selling something via an
+    // active x402 endpoint, or (b) anchored on-chain. The "anchored but no
+    // endpoint" cohort is profile-only — they earn discovery via the
+    // registry even before they list a service. Render handles both shapes.
     const agents = await db.agent.findMany({
         where: {
             active: true,
-            x402Endpoints: { some: { active: true } },
+            OR: [
+                { x402Endpoints: { some: { active: true } } },
+                { chainAgentId: { not: null } },
+            ],
         },
         include: {
             currentOperatorWallet: true,

@@ -27,8 +27,39 @@ import { hashToken } from "./tokens";
  */
 
 const RP_NAME = "ArkAge";
-const RP_ID = process.env.ARKAGE_RP_ID ?? "localhost";
-const ORIGIN = process.env.ARKAGE_RP_ORIGIN ?? "http://localhost:3000";
+
+/**
+ * WebAuthn rpID resolution order:
+ *  1. `ARKAGE_RP_ID` env var (explicit override; set this in Vercel for a
+ *     custom domain like `arkage.network`).
+ *  2. `VERCEL_PROJECT_PRODUCTION_URL` (Vercel's stable production hostname;
+ *     auto-set on every deploy, e.g. `arkage-zeta.vercel.app`). Picking the
+ *     production URL — NOT `VERCEL_URL` — means a passkey registered on
+ *     the stable alias survives across deployment commits.
+ *  3. `localhost` fallback for `npm run dev`.
+ *
+ * Same logic mirrored for ORIGIN. The `https://` prefix is required by
+ * WebAuthn except on localhost; Vercel preview / production are always
+ * served over HTTPS.
+ */
+function resolveRpId(): string {
+    if (process.env.ARKAGE_RP_ID) return process.env.ARKAGE_RP_ID;
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+        return process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    }
+    return "localhost";
+}
+
+function resolveOrigin(): string {
+    if (process.env.ARKAGE_RP_ORIGIN) return process.env.ARKAGE_RP_ORIGIN;
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+        return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+    }
+    return "http://localhost:3000";
+}
+
+const RP_ID = resolveRpId();
+const ORIGIN = resolveOrigin();
 
 export interface StoredCredential {
     id: string; // base64url

@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Address } from "@/components/primitives/address";
+import { OnchainAnchorBadge } from "@/components/primitives/onchain-anchor-badge";
 
 interface Row {
     agentId: string;
@@ -16,6 +17,8 @@ interface Row {
     active: boolean;
     feedbackCount: number;
     averageScore: number | null;
+    chainAgentId: bigint | null;
+    identityRegisterTxHash: Uint8Array | null;
 }
 
 export function AgentsTable({ rows }: { rows: Row[] }) {
@@ -33,6 +36,7 @@ export function AgentsTable({ rows }: { rows: Row[] }) {
                     <TableRow>
                         <TableHead>Agent</TableHead>
                         <TableHead>Operator</TableHead>
+                        <TableHead>Anchor</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead className="text-right">Feedback</TableHead>
                         <TableHead className="text-right">Avg score</TableHead>
@@ -51,6 +55,12 @@ export function AgentsTable({ rows }: { rows: Row[] }) {
                             </TableCell>
                             <TableCell>
                                 <Address value={r.operator} />
+                            </TableCell>
+                            <TableCell>
+                                <OnchainAnchorBadge
+                                    chainAgentId={r.chainAgentId}
+                                    identityTxHash={r.identityRegisterTxHash}
+                                />
                             </TableCell>
                             <TableCell>
                                 <Badge variant={r.active ? "default" : "outline"}>
