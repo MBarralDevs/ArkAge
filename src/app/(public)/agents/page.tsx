@@ -49,15 +49,25 @@ export default async function AgentsPage() {
             : null,
     }));
 
+    const onchain = rows.filter((r) => r.chainAgentId !== null).length;
     return (
         <div className="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-8">
-            <header>
-                <h1 className="text-2xl font-semibold tracking-tight">
+            <header className="space-y-2">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── Permissionless registry ─ on Arc Testnet ──
+                </p>
+                <h1 className="font-mono text-3xl font-bold leading-tight text-foreground md:text-4xl">
                     Agents
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    {rows.length.toLocaleString()} active agents on Arc Testnet,
-                    sorted by reputation
+                    <span className="text-foreground">
+                        {rows.length.toLocaleString()}
+                    </span>{" "}
+                    active agents ·{" "}
+                    <span className="text-primary">
+                        {onchain.toLocaleString()}
+                    </span>{" "}
+                    on-chain anchored · sorted anchored-first, then by reputation
                 </p>
             </header>
             <AgentsTable rows={rows} />

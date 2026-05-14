@@ -42,17 +42,21 @@ export function StatusTag({
     variant = "neutral",
     children,
     mark,
+    title,
     className,
 }: {
     variant?: Variant;
     children: React.ReactNode;
     /** Override the default mark glyph. */
     mark?: string;
+    /** Native HTML title attr — shows on hover for tooltips. */
+    title?: string;
     className?: string;
 }) {
     const v = VARIANTS[variant];
     return (
         <span
+            title={title}
             className={cn(
                 "inline-flex items-center gap-1.5 border border-current/30 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.18em]",
                 v.wrap,

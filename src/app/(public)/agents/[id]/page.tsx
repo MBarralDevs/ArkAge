@@ -10,6 +10,8 @@ import { ReputationDiversityBadge } from "@/components/agents/reputation-diversi
 import { JobHistoryTable } from "@/components/agents/job-history-table";
 import { X402EndpointsList } from "@/components/agents/x402-endpoints-list";
 import { DisputesSection } from "@/components/agents/disputes-section";
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
+import { AsciiDivider } from "@/components/terminal/ascii-divider";
 import { loadAgentReputation } from "@/lib/reputation-stats";
 import { loadAgentDisputes } from "@/lib/disputes-stats";
 
@@ -64,9 +66,13 @@ export default async function AgentProfile({
 
     return (
         <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── Agent profile ─ /agents/{agent.agentId.toString()} ──
+                </p>
                 <ShareAgentButton agentId={agent.agentId.toString()} />
             </div>
+
             <IdentityCard
                 agentId={agent.agentId.toString()}
                 identityOwner={
@@ -85,58 +91,96 @@ export default async function AgentProfile({
                 identityRegisterTxHash={agent.identityRegisterTxHash}
             />
 
-            <section className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span>Trust signals:</span>
-                <ReputationFreshnessBadge freshness={stats.freshness} />
-                <ReputationDiversityBadge diversity={stats.diversity} />
-                <span className="ml-2">
-                    {stats.total} feedback event
-                    {stats.total === 1 ? "" : "s"}
-                    {stats.averageScore != null
-                        ? ` · avg ${stats.averageScore.toFixed(2)}`
-                        : ""}
-                </span>
-            </section>
+            <TerminalPanel label="TRUST SIGNALS">
+                <div className="flex flex-wrap items-center gap-3">
+                    <ReputationFreshnessBadge freshness={stats.freshness} />
+                    <ReputationDiversityBadge diversity={stats.diversity} />
+                    <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                        ·{" "}
+                        <span className="text-foreground tabular-nums">
+                            {stats.total}
+                        </span>{" "}
+                        feedback event{stats.total === 1 ? "" : "s"}
+                        {stats.averageScore != null && (
+                            <>
+                                {" · avg "}
+                                <span className="text-primary tabular-nums">
+                                    {stats.averageScore.toFixed(2)}
+                                </span>
+                            </>
+                        )}
+                    </span>
+                </div>
+            </TerminalPanel>
+
+            <AsciiDivider label="REPUTATION" />
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <ReputationDistribution data={stats.distribution} />
-                <ReputationTimeseries
-                    data={stats.timeseries.map((s) => ({
-                        ts: s.ts,
-                        score: s.runningAverage,
-                    }))}
-                />
+                <TerminalPanel label="SCORE DISTRIBUTION" bare>
+                    <div className="p-2">
+                        <ReputationDistribution data={stats.distribution} />
+                    </div>
+                </TerminalPanel>
+                <TerminalPanel label="RUNNING AVERAGE" bare>
+                    <div className="p-2">
+                        <ReputationTimeseries
+                            data={stats.timeseries.map((s) => ({
+                                ts: s.ts,
+                                score: s.runningAverage,
+                            }))}
+                        />
+                    </div>
+                </TerminalPanel>
             </div>
 
-            <ReputationByEvaluator rows={stats.byEvaluator} />
+            <TerminalPanel label="BY EVALUATOR TIER" bare>
+                <div className="p-4">
+                    <ReputationByEvaluator rows={stats.byEvaluator} />
+                </div>
+            </TerminalPanel>
 
-            <DisputesSection stats={disputeStats} />
+            <AsciiDivider label="DISPUTES" />
+            <TerminalPanel label="DISPUTE HISTORY" bare>
+                <div className="p-4">
+                    <DisputesSection stats={disputeStats} />
+                </div>
+            </TerminalPanel>
 
-            <JobHistoryTable
-                asClient={asClient.map((j) => ({
-                    jobId: j.jobId.toString(),
-                    status: j.status,
-                    budget: j.budget?.toString() ?? null,
-                    counterparty:
-                        j.providerAgent?.agentId?.toString() ?? null,
-                }))}
-                asProvider={asProvider.map((j) => ({
-                    jobId: j.jobId.toString(),
-                    status: j.status,
-                    budget: j.budget?.toString() ?? null,
-                    counterparty: j.clientAgent?.agentId?.toString() ?? null,
-                }))}
-            />
+            <AsciiDivider label="ACTIVITY" />
+            <TerminalPanel label="RECENT JOBS" bare>
+                <div className="p-4">
+                    <JobHistoryTable
+                        asClient={asClient.map((j) => ({
+                            jobId: j.jobId.toString(),
+                            status: j.status,
+                            budget: j.budget?.toString() ?? null,
+                            counterparty:
+                                j.providerAgent?.agentId?.toString() ?? null,
+                        }))}
+                        asProvider={asProvider.map((j) => ({
+                            jobId: j.jobId.toString(),
+                            status: j.status,
+                            budget: j.budget?.toString() ?? null,
+                            counterparty:
+                                j.clientAgent?.agentId?.toString() ?? null,
+                        }))}
+                    />
+                </div>
+            </TerminalPanel>
 
-            <X402EndpointsList
-                endpoints={agent.x402Endpoints.map((e) => ({
-                    id: e.id.toString(),
-                    url: e.effectiveUrl,
-                    pricePerCall: e.pricePerCall.toString(),
-                    hosting: e.hosting,
-                    active: e.active,
-                }))}
-            />
+            <TerminalPanel label="x402 ENDPOINTS" bare>
+                <div className="p-4">
+                    <X402EndpointsList
+                        endpoints={agent.x402Endpoints.map((e) => ({
+                            id: e.id.toString(),
+                            url: e.effectiveUrl,
+                            pricePerCall: e.pricePerCall.toString(),
+                            hosting: e.hosting,
+                            active: e.active,
+                        }))}
+                    />
+                </div>
+            </TerminalPanel>
         </div>
     );
 }
