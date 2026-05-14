@@ -19,6 +19,7 @@ export async function Header() {
                     <NavLink href="/services">Services</NavLink>
                     <NavLink href="/jobs">Jobs</NavLink>
                     <NavLink href="/agents">Agents</NavLink>
+                    <NavLink href="/evaluators">Evaluators</NavLink>
                     <NavLink href="/reputation">Reputation</NavLink>
                     <NavLink href="/x402">x402</NavLink>
                     <NavLink href="/security">Security</NavLink>
