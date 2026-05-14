@@ -310,18 +310,22 @@ model X402Receipt {
 }
 
 model X402Dispute {
-  id             BigInt      @id @default(autoincrement())
-  receiptId      BigInt      @map("receipt_id")
-  raisedByWallet Bytes       @map("raised_by_wallet")
-  reason         String
-  evidenceJsonb  Json?       @map("evidence_jsonb")
-  workflowRunId  String?     @map("workflow_run_id")
-  status         String
-  resolutionTx   Bytes?      @map("resolution_tx")
-  resolvedAt     DateTime?   @map("resolved_at")
-  createdAt      DateTime    @default(now()) @map("created_at")
-  updatedAt      DateTime    @updatedAt @map("updated_at")
-  receipt        X402Receipt @relation(fields: [receiptId], references: [id])
+  id                       BigInt      @id @default(autoincrement())
+  receiptId                BigInt      @map("receipt_id")
+  raisedByWallet           Bytes       @map("raised_by_wallet")
+  reason                   String
+  evidenceJsonb            Json?       @map("evidence_jsonb")
+  workflowRunId            String?     @map("workflow_run_id")
+  status                   String
+  resolutionTx             Bytes?      @map("resolution_tx")
+  resolvedAt               DateTime?   @map("resolved_at")
+  // Plan E.1 phase 2.2 — counter-party response window. The seller (or
+  // their evaluator) can submit evidence in reply to the buyer's dispute.
+  counterpartyResponseJsonb Json?      @map("counterparty_response_jsonb")
+  counterpartyRespondedAt   DateTime?  @map("counterparty_responded_at")
+  createdAt                DateTime    @default(now()) @map("created_at")
+  updatedAt                DateTime    @updatedAt @map("updated_at")
+  receipt                  X402Receipt @relation(fields: [receiptId], references: [id])
 
   @@map("x402_disputes")
 }

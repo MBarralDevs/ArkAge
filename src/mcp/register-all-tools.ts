@@ -49,6 +49,7 @@ import "./tools/x402/register-x402-endpoint";
 import "./tools/x402/list-my-x402-endpoints";
 import "./tools/x402/list-my-x402-receipts";
 import "./tools/x402/dispute-receipt";
+import "./tools/x402/respond-to-dispute";
 import "./tools/x402/gateway-deposit";
 
 export {};

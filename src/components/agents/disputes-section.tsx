@@ -80,6 +80,12 @@ export function DisputesSection({ stats }: { stats: DisputesStats }) {
                             >
                                 <div className="space-y-0.5">
                                     <div className="flex flex-wrap items-center gap-1.5">
+                                        <Link
+                                            href={`/disputes/${d.id}`}
+                                            className="font-mono text-muted-foreground hover:text-foreground hover:underline"
+                                        >
+                                            #{d.id}
+                                        </Link>
                                         <Badge
                                             variant={
                                                 d.status === "open"
@@ -101,7 +107,12 @@ export function DisputesSection({ stats }: { stats: DisputesStats }) {
                                         </span>
                                     </div>
                                     <p className="text-muted-foreground line-clamp-1">
-                                        {d.reason}
+                                        <Link
+                                            href={`/disputes/${d.id}`}
+                                            className="hover:text-foreground"
+                                        >
+                                            {d.reason}
+                                        </Link>
                                     </p>
                                 </div>
                                 <div className="text-right text-[11px] text-muted-foreground tabular-nums">
