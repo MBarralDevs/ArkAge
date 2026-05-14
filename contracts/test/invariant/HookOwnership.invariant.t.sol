@@ -6,6 +6,8 @@ import {HookComposer} from "../../src/HookComposer.sol";
 import {ReputationHook} from "../../src/ReputationHook.sol";
 import {PolicyHook} from "../../src/PolicyHook.sol";
 import {EvaluatorFeeHook} from "../../src/EvaluatorFeeHook.sol";
+import {RateLimitHook} from "../../src/RateLimitHook.sol";
+import {RoyaltyHook} from "../../src/RoyaltyHook.sol";
 import {AgentRegistry} from "../../src/AgentRegistry.sol";
 import {MockACP} from "../mocks/MockACP.sol";
 import {MockIdentityRegistry} from "../mocks/MockIdentityRegistry.sol";
@@ -36,6 +38,8 @@ contract HookOwnershipInvariantTest is Test {
     ReputationHook reputationHook;
     PolicyHook policyHook;
     EvaluatorFeeHook feeHook;
+    RateLimitHook rateLimitHook;
+    RoyaltyHook royaltyHook;
     AgentRegistry registry;
     MockIdentityRegistry idReg;
 
@@ -49,6 +53,21 @@ contract HookOwnershipInvariantTest is Test {
         policyHook = new PolicyHook(address(acp), address(registry), address(this));
         reputationHook = new ReputationHook(address(acp), address(rep), address(registry), address(this));
         feeHook = new EvaluatorFeeHook(address(acp), address(usdc), address(0xDEAD), address(registry), address(this));
+        // Theme E.3 reference hooks — same Risk #1 invariant applies.
+        rateLimitHook = new RateLimitHook(
+            address(acp),
+            address(registry),
+            address(idReg),
+            address(this),
+            3600,
+            10
+        );
+        royaltyHook = new RoyaltyHook(
+            address(acp),
+            address(registry),
+            address(idReg),
+            address(this)
+        );
 
         address[] memory before_ = new address[](1);
         before_[0] = address(policyHook);
@@ -57,23 +76,26 @@ contract HookOwnershipInvariantTest is Test {
         after_[1] = address(reputationHook);
         composer = new HookComposer(address(acp), before_, after_);
 
-        // Restrict the fuzzer to ONLY our 5 contracts. We deliberately do NOT
-        // target MockIdentityRegistry — its setOwner is a test-only admin
-        // shim that doesn't exist on the real ERC-8004 registry. Including
-        // it would let the fuzzer bypass the contracts under audit and just
-        // assign NFTs to hook addresses directly, which proves nothing.
-        // The real attack surface is: "can any function on our 5 contracts
+        // Restrict the fuzzer to ONLY our contracts under audit. We
+        // deliberately do NOT target MockIdentityRegistry — its setOwner is a
+        // test-only admin shim that doesn't exist on the real ERC-8004
+        // registry. Including it would let the fuzzer bypass the contracts
+        // under audit and just assign NFTs to hook addresses directly, which
+        // proves nothing.
+        // The real attack surface is: "can any function on our contracts
         // result in one of them becoming an 8004 NFT owner?"
         targetContract(address(registry));
         targetContract(address(policyHook));
         targetContract(address(reputationHook));
         targetContract(address(feeHook));
+        targetContract(address(rateLimitHook));
+        targetContract(address(royaltyHook));
         targetContract(address(composer));
     }
 
     /// @notice Property: across any sequence of fuzzer-generated calls,
-    ///         none of the 5 contracts can ever be the owner of any 8004
-    ///         identity NFT in the range [0, 100).
+    ///         none of the audited contracts can ever be the owner of any
+    ///         8004 identity NFT in the range [0, 100).
     /// @dev    100 is enough to give the fuzzer room without inflating the
     ///         per-iteration cost. If a violation exists, the shrinker will
     ///         find it on a small agentId.
@@ -84,6 +106,8 @@ contract HookOwnershipInvariantTest is Test {
             assertTrue(owner != address(reputationHook), "reputationHook owns NFT");
             assertTrue(owner != address(policyHook), "policyHook owns NFT");
             assertTrue(owner != address(feeHook), "feeHook owns NFT");
+            assertTrue(owner != address(rateLimitHook), "rateLimitHook owns NFT");
+            assertTrue(owner != address(royaltyHook), "royaltyHook owns NFT");
             assertTrue(owner != address(registry), "registry owns NFT");
         }
     }
