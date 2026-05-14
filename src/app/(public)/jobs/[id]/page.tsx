@@ -10,13 +10,9 @@ import { LifecycleStrip } from "@/components/jobs/lifecycle-strip";
 import { EvaluatorPanel } from "@/components/jobs/evaluator-panel";
 import { WorkflowStreamViewer } from "@/components/jobs/workflow-stream-viewer";
 import { PolicyDecisionsPanel } from "@/components/jobs/policy-decisions-panel";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
+import { AsciiDivider } from "@/components/terminal/ascii-divider";
+import { DataRow } from "@/components/terminal/data-row";
 
 export const dynamic = "force-dynamic";
 
@@ -67,32 +63,45 @@ export default async function JobDetail({
 
     return (
         <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
-            <header className="flex flex-wrap items-start justify-between gap-4">
-                <div className="space-y-1">
-                    <h1 className="font-mono text-2xl font-semibold">
-                        Job #{job.jobId.toString()}
-                    </h1>
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                        <JobStatusBadge status={job.status} />
-                        <span>
-                            Budget:{" "}
-                            <MoneyDisplay
-                                raw={job.budget?.toString() ?? null}
-                            />
-                        </span>
-                        <span>
-                            Expires: {job.expiredAt.toLocaleString()}
-                        </span>
+            <header className="space-y-3">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── Job detail ─ /jobs/{job.jobId.toString()} ──
+                </p>
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                    <div className="space-y-2">
+                        <h1 className="font-mono text-3xl font-bold leading-tight text-foreground md:text-4xl">
+                            Job{" "}
+                            <span className="text-primary">
+                                #{job.jobId.toString()}
+                            </span>
+                        </h1>
+                        <div className="flex flex-wrap items-center gap-3 text-xs">
+                            <JobStatusBadge status={job.status} />
+                            <span className="text-muted-foreground">
+                                <span className="uppercase tracking-[0.18em]">
+                                    budget
+                                </span>{" "}
+                                <MoneyDisplay
+                                    raw={job.budget?.toString() ?? null}
+                                />
+                            </span>
+                            <span className="text-muted-foreground">
+                                <span className="uppercase tracking-[0.18em]">
+                                    expires
+                                </span>{" "}
+                                {job.expiredAt.toLocaleString()}
+                            </span>
+                        </div>
                     </div>
+                    <Link
+                        href={addressLink(hookAddrHex)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="border border-border px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-foreground transition-colors hover:border-primary hover:text-primary"
+                    >
+                        [hook&nbsp;on&nbsp;arcscan&nbsp;↗]
+                    </Link>
                 </div>
-                <Link
-                    href={addressLink(hookAddrHex)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm underline-offset-4 hover:underline"
-                >
-                    View hook on Arcscan ↗
-                </Link>
             </header>
 
             <LifecycleStrip
@@ -104,56 +113,49 @@ export default async function JobDetail({
             />
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <Card className="md:col-span-1">
-                    <CardHeader>
-                        <CardTitle className="text-base">Parties</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2 text-sm">
-                        <div>
-                            <span className="text-muted-foreground">
-                                Client agent:{" "}
-                            </span>
-                            {job.clientAgent ? (
-                                <Link
-                                    href={`/agents/${job.clientAgent.agentId}`}
-                                    className="font-mono hover:underline"
-                                >
-                                    #{job.clientAgent.agentId.toString()}
-                                </Link>
-                            ) : (
-                                "—"
-                            )}
-                        </div>
-                        <div>
-                            <span className="text-muted-foreground">
-                                Provider agent:{" "}
-                            </span>
-                            {job.providerAgent ? (
-                                <Link
-                                    href={`/agents/${job.providerAgent.agentId}`}
-                                    className="font-mono hover:underline"
-                                >
-                                    #{job.providerAgent.agentId.toString()}
-                                </Link>
-                            ) : (
-                                "—"
-                            )}
-                        </div>
-                        <Separator />
-                        <div>
-                            <span className="text-muted-foreground">
-                                Evaluator:{" "}
-                            </span>
-                            <Address value={evaluatorAddrHex} />
-                        </div>
-                        <div>
-                            <span className="text-muted-foreground">
-                                Hook:{" "}
-                            </span>
-                            <Address value={hookAddrHex} />
-                        </div>
-                    </CardContent>
-                </Card>
+                <TerminalPanel label="PARTIES" className="md:col-span-1">
+                    <dl>
+                        <DataRow
+                            label="Client"
+                            value={
+                                job.clientAgent ? (
+                                    <Link
+                                        href={`/agents/${job.clientAgent.agentId}`}
+                                        className="text-primary hover:underline"
+                                    >
+                                        #{job.clientAgent.agentId.toString()}
+                                    </Link>
+                                ) : (
+                                    "—"
+                                )
+                            }
+                        />
+                        <DataRow
+                            label="Provider"
+                            value={
+                                job.providerAgent ? (
+                                    <Link
+                                        href={`/agents/${job.providerAgent.agentId}`}
+                                        className="text-primary hover:underline"
+                                    >
+                                        #
+                                        {job.providerAgent.agentId.toString()}
+                                    </Link>
+                                ) : (
+                                    "—"
+                                )
+                            }
+                        />
+                        <DataRow
+                            label="Evaluator"
+                            value={<Address value={evaluatorAddrHex} />}
+                        />
+                        <DataRow
+                            label="Hook"
+                            value={<Address value={hookAddrHex} />}
+                        />
+                    </dl>
+                </TerminalPanel>
 
                 <div className="md:col-span-2">
                     <EvaluatorPanel
@@ -165,54 +167,51 @@ export default async function JobDetail({
                 </div>
             </div>
 
-            {evalRun && <WorkflowStreamViewer runId={evalRun.runId} />}
+            {evalRun && (
+                <>
+                    <AsciiDivider label="WORKFLOW STREAM" />
+                    <WorkflowStreamViewer runId={evalRun.runId} />
+                </>
+            )}
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">
-                        On-chain events
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {job.events.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                            No events indexed yet.
-                        </p>
-                    ) : (
-                        <ul className="space-y-2 text-sm">
-                            {job.events.map((e) => (
-                                <li
-                                    key={e.id.toString()}
-                                    className="flex flex-wrap items-center gap-3 border-b border-border/30 pb-2 last:border-b-0"
-                                >
-                                    <span className="font-mono text-xs uppercase text-muted-foreground">
-                                        {e.eventKind}
-                                    </span>
-                                    <Address
-                                        value={
-                                            "0x" +
-                                            Buffer.from(
-                                                e.actorAddress,
-                                            ).toString("hex")
-                                        }
-                                    />
-                                    <TxLink
-                                        hash={
-                                            "0x" +
-                                            Buffer.from(e.txHash).toString(
-                                                "hex",
-                                            )
-                                        }
-                                    />
-                                    <span className="ml-auto text-xs text-muted-foreground">
-                                        {e.blockTime.toLocaleString()}
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </CardContent>
-            </Card>
+            <AsciiDivider label="ON-CHAIN EVENTS" />
+            <TerminalPanel label={`EVENT LOG / ${job.events.length}`} bare>
+                {job.events.length === 0 ? (
+                    <p className="px-4 py-6 text-center text-[10px] uppercase tracking-[0.22em] text-muted-foreground">
+                        No events indexed yet
+                    </p>
+                ) : (
+                    <ul className="divide-y divide-border/40">
+                        {job.events.map((e) => (
+                            <li
+                                key={e.id.toString()}
+                                className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 px-4 py-2 text-xs"
+                            >
+                                <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-primary">
+                                    {e.eventKind}
+                                </span>
+                                <Address
+                                    value={
+                                        "0x" +
+                                        Buffer.from(
+                                            e.actorAddress,
+                                        ).toString("hex")
+                                    }
+                                />
+                                <TxLink
+                                    hash={
+                                        "0x" +
+                                        Buffer.from(e.txHash).toString("hex")
+                                    }
+                                />
+                                <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                                    {e.blockTime.toLocaleString()}
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </TerminalPanel>
 
             <PolicyDecisionsPanel jobId={id} />
         </div>

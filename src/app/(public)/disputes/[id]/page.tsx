@@ -1,14 +1,11 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Address } from "@/components/primitives/address";
 import { DisputeTimeline } from "@/components/disputes/dispute-timeline";
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
+import { AsciiDivider } from "@/components/terminal/ascii-divider";
+import { StatusTag } from "@/components/terminal/status-tag";
+import { DataRow } from "@/components/terminal/data-row";
 import { loadDisputeDetail } from "@/lib/dispute-detail";
 import {
     disputeStatusLabel,
@@ -18,8 +15,8 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Plan E.1 phase 2.1 — public timeline view for a single dispute.
- * No auth gate; transparency IS the trust-layer.
+ * Public timeline view for a single dispute. No auth gate; transparency
+ * IS the trust layer.
  */
 export default async function DisputeDetailPage({
     params,
@@ -34,134 +31,126 @@ export default async function DisputeDetailPage({
 
     return (
         <div className="mx-auto w-full max-w-4xl space-y-6 p-4 md:p-8">
-            <header className="space-y-2">
+            <header className="space-y-3">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── Dispute timeline ─ /disputes/{detail.id} ──
+                </p>
                 <div className="flex flex-wrap items-baseline gap-3">
-                    <h1 className="text-2xl font-semibold tracking-tight">
-                        Dispute #{detail.id}
+                    <h1 className="font-mono text-3xl font-bold leading-tight text-foreground md:text-4xl">
+                        Dispute{" "}
+                        <span className="text-primary">#{detail.id}</span>
                     </h1>
-                    <Badge
-                        variant={badgeVariantForStatus(detail.status)}
-                        className="text-xs"
-                    >
+                    <StatusTag variant={statusTagVariant(detail.status)}>
                         {disputeStatusLabel(detail.status)}
-                    </Badge>
+                    </StatusTag>
                 </div>
-                <p className="max-w-2xl text-sm text-muted-foreground">
-                    Disputes on ArkAge are public. The full lifecycle —
-                    who raised, why, what the auto-resolution workflow
-                    found, how it was settled — is visible on this page.
+                <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                    Disputes on ArkAge are public. The full lifecycle — who
+                    raised, why, what the auto-resolution workflow found, how
+                    it was settled — is visible on this page.
                 </p>
             </header>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Context</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                        <div>
-                            <dt className="text-muted-foreground">Receipt</dt>
-                            <dd className="font-mono">#{detail.receipt.id}</dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">Amount</dt>
-                            <dd className="font-mono tabular-nums">
-                                {rawUsdcDisplay(detail.receipt.amount)} USDC
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">Session</dt>
-                            <dd>
-                                <Link
-                                    href={`/x402/sessions/${detail.session.id}`}
-                                    className="font-mono hover:underline"
-                                >
-                                    #{detail.session.id}
-                                </Link>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">
-                                Endpoint URL
-                            </dt>
-                            <dd className="break-all font-mono text-[11px]">
-                                {detail.receipt.url}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">Buyer</dt>
-                            <dd>
+            <TerminalPanel label="CONTEXT">
+                <dl className="grid grid-cols-1 gap-x-8 sm:grid-cols-2">
+                    <DataRow
+                        label="Receipt"
+                        value={`#${detail.receipt.id}`}
+                    />
+                    <DataRow
+                        label="Amount"
+                        value={`${rawUsdcDisplay(detail.receipt.amount)} USDC`}
+                        accent
+                    />
+                    <DataRow
+                        label="Session"
+                        value={
+                            <Link
+                                href={`/x402/sessions/${detail.session.id}`}
+                                className="text-primary hover:underline"
+                            >
+                                #{detail.session.id}
+                            </Link>
+                        }
+                    />
+                    <DataRow
+                        label="Original HTTP"
+                        value={detail.receipt.httpStatus ?? "—"}
+                    />
+                    <DataRow
+                        label="Buyer"
+                        value={
+                            <span className="flex items-center gap-2">
                                 <Link
                                     href={`/agents/${detail.session.buyerAgentId}`}
-                                    className="font-mono hover:underline"
+                                    className="text-primary hover:underline"
                                 >
-                                    agent #{detail.session.buyerAgentId}
-                                </Link>{" "}
-                                <span className="text-muted-foreground">
-                                    (<Address value={detail.receipt.buyerWallet} />)
-                                </span>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">Seller</dt>
-                            <dd>
+                                    #{detail.session.buyerAgentId}
+                                </Link>
+                                <Address
+                                    value={detail.receipt.buyerWallet}
+                                />
+                            </span>
+                        }
+                    />
+                    <DataRow
+                        label="Seller"
+                        value={
+                            <span className="flex items-center gap-2">
                                 <Link
                                     href={`/agents/${detail.session.sellerAgentId}`}
-                                    className="font-mono hover:underline"
+                                    className="text-primary hover:underline"
                                 >
-                                    agent #{detail.session.sellerAgentId}
-                                </Link>{" "}
-                                <span className="text-muted-foreground">
-                                    (<Address value={detail.receipt.sellerWallet} />)
-                                </span>
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">
-                                Original HTTP status
-                            </dt>
-                            <dd className="font-mono">
-                                {detail.receipt.httpStatus ?? "—"}
-                            </dd>
-                        </div>
-                        <div>
-                            <dt className="text-muted-foreground">
-                                Facilitator processed
-                            </dt>
-                            <dd className="font-mono text-[11px]">
+                                    #{detail.session.sellerAgentId}
+                                </Link>
+                                <Address
+                                    value={detail.receipt.sellerWallet}
+                                />
+                            </span>
+                        }
+                    />
+                    <DataRow
+                        label="Endpoint URL"
+                        value={
+                            <span className="break-all text-[11px]">
+                                {detail.receipt.url}
+                            </span>
+                        }
+                    />
+                    <DataRow
+                        label="Facilitator processed"
+                        value={
+                            <span className="text-[11px]">
                                 {new Date(
                                     detail.receipt.facilitatorProcessedAt,
                                 ).toLocaleString()}
-                            </dd>
-                        </div>
-                    </dl>
-                </CardContent>
-            </Card>
+                            </span>
+                        }
+                    />
+                </dl>
+            </TerminalPanel>
 
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Timeline</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <DisputeTimeline detail={detail} />
-                </CardContent>
-            </Card>
+            <AsciiDivider label="TIMELINE" />
+
+            <TerminalPanel label="EVENT LOG">
+                <DisputeTimeline detail={detail} />
+            </TerminalPanel>
         </div>
     );
 }
 
-function badgeVariantForStatus(
+function statusTagVariant(
     s: DisputeStatus,
-): "default" | "outline" | "secondary" {
+): "ok" | "warn" | "crit" | "muted" | "neutral" {
     switch (s) {
         case "resolved_refund":
-            return "default";
+            return "ok";
         case "resolved_no_refund":
-            return "outline";
+            return "muted";
         case "manual_review":
-            return "secondary";
+            return "warn";
         case "open":
-            return "default";
+            return "warn";
     }
 }
 
