@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { resumeHook } from "workflow/api";
+import { resumeHook, start } from "workflow/api";
 import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
 import { CHAIN_ID as ARC_CHAIN_ID } from "@/lib/chain";
 import {
@@ -7,6 +7,7 @@ import {
     jobSubmittedToken,
     jobTerminalToken,
 } from "@/workflows/lib/hook-tokens";
+import { jobLifecycle } from "@/workflows/job-lifecycle";
 
 /**
  * Circle Web3 Services / Smart Contract Platform webhook envelope.
@@ -32,7 +33,7 @@ export interface CircleNotificationEnvelope {
  * indexed by Circle Smart Contract Platform. Each notification represents
  * a single decoded event log.
  */
-interface ContractEventNotification {
+export interface ContractEventNotification {
     contractAddress: string;
     eventName: string;
     txHash: string;
@@ -140,6 +141,28 @@ export async function handleJobCreated(
             createdAtBlock: BigInt(data.blockNumber),
         },
     });
+
+    // Spawn the jobLifecycle workflow exactly once per jobId. It owns the
+    // self-rescuing await chain (funded → submitted → evaluator child →
+    // terminal). Idempotent via workflow_runs lookup so backfill and
+    // replays from the cron don't multi-start.
+    const existingRun = await db.workflowRun.findFirst({
+        where: { kind: "jobLifecycle", kindId: BigInt(p.jobId) },
+        select: { runId: true },
+    });
+    if (!existingRun) {
+        try {
+            await start(jobLifecycle, [
+                BigInt(p.jobId),
+                Number(p.expiredAt),
+            ]);
+        } catch (e) {
+            console.error(
+                `[handleJobCreated] workflow start failed for jobId=${p.jobId}`,
+                e instanceof Error ? e.message : String(e),
+            );
+        }
+    }
 
     await db.jobEvent
         .upsert({

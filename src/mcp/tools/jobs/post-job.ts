@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { encodeFunctionData, type Address } from "viem";
+import {
+    decodeEventLog,
+    encodeFunctionData,
+    keccak256,
+    parseAbiItem,
+    toBytes,
+    type Address,
+    type Hex,
+} from "viem";
 import { db } from "@/lib/db";
 import { ok, err, type Result } from "@/mcp/result";
 import { registerTool } from "@/mcp/server";
@@ -7,9 +15,104 @@ import type { McpAuthContext } from "@/mcp/auth";
 import { ERC8183_ABI } from "@/lib/abis";
 import { ARC_TESTNET_ADDRESSES, ARKAGE_ADDRESSES } from "@/lib/addresses";
 import { executeTier2Call } from "@/lib/tier2-dispatch";
+import { waitForTxHash } from "@/lib/tier2-dcw";
+import { publicClient, CHAIN_ID as ARC_CHAIN_ID } from "@/lib/chain";
 import { route } from "@/lib/wallet-router";
 import { evaluatePolicy } from "@/lib/policy-engine";
 import { loadAgentByDbId } from "@/lib/agent-loader";
+import {
+    handleJobCreated,
+    type ContractEventNotification,
+} from "@/workers/ingest-circle-event";
+
+const JOB_CREATED_EVENT = parseAbiItem(
+    "event JobCreated(uint256 indexed jobId, address indexed client, address indexed provider, address evaluator, uint256 expiredAt, address hook)",
+);
+const JOB_CREATED_TOPIC = keccak256(
+    toBytes(
+        "JobCreated(uint256,address,address,address,uint256,address)",
+    ),
+);
+
+/**
+ * Optimistic post-flight: turn the freshly-broadcast createJob tx into a
+ * Job row in the DB before this MCP call returns, so the caller can act
+ * on the on-chain jobId immediately. Resolves the txHash from either
+ * signing path (external-EOA broadcasts directly, Circle DCW gets queued
+ * and gives us a hash via `waitForTxHash`), waits for the receipt,
+ * decodes JobCreated, and pipes it through the same `handleJobCreated`
+ * path the goldsky normalizer uses. Best-effort: the every-minute
+ * normalizer cron is the safety net.
+ */
+async function landJobOptimistically(args: {
+    queuedTxId: string;
+    state: string;
+}): Promise<{ jobId: string | null; txHash: Hex | null }> {
+    let txHash: Hex;
+    if (args.state === "SENT") {
+        txHash = args.queuedTxId as Hex;
+    } else {
+        txHash = await waitForTxHash(args.queuedTxId, {
+            timeoutMs: 30_000,
+            pollMs: 1_500,
+        });
+    }
+    const receipt = await publicClient.waitForTransactionReceipt({
+        hash: txHash,
+        timeout: 30_000,
+    });
+    if (receipt.status !== "success") return { jobId: null, txHash };
+
+    const log = receipt.logs.find(
+        (l) =>
+            l.address.toLowerCase() ===
+                ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE.toLowerCase() &&
+            l.topics[0] === JOB_CREATED_TOPIC,
+    );
+    if (!log) return { jobId: null, txHash };
+
+    const decoded = decodeEventLog({
+        abi: [JOB_CREATED_EVENT],
+        topics: log.topics,
+        data: log.data,
+    });
+    const args2 = decoded.args as unknown as {
+        jobId: bigint;
+        client: Address;
+        provider: Address;
+        evaluator: Address;
+        expiredAt: bigint;
+        hook: Address;
+    };
+
+    const params: Record<string, string> = {
+        jobId: args2.jobId.toString(),
+        client: args2.client,
+        provider: args2.provider,
+        evaluator: args2.evaluator,
+        expiredAt: args2.expiredAt.toString(),
+        hook: args2.hook,
+    };
+
+    const block = await publicClient.getBlock({
+        blockNumber: receipt.blockNumber,
+    });
+    const notif: ContractEventNotification = {
+        contractAddress: ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
+        eventName: "JobCreated",
+        txHash,
+        logIndex: log.logIndex ?? 0,
+        blockNumber: receipt.blockNumber.toString(),
+        blockTime: new Date(Number(block.timestamp) * 1000).toISOString(),
+        params,
+    };
+
+    // handleJobCreated upserts on jobId, so the eventual cron-driven
+    // delivery is a no-op. It also spawns jobLifecycle idempotently.
+    await handleJobCreated(notif);
+
+    return { jobId: args2.jobId.toString(), txHash };
+}
 
 /**
  * arkage:post_job — caller posts an ERC-8183 job.
@@ -45,6 +148,7 @@ const Input = z.object({
 
 interface PostJobOutput {
     jobId: string | null;
+    txHash: string | null;
     createTransactionId: string;
     createTxState: string;
 }
@@ -113,6 +217,25 @@ export async function handlePostJob(
     });
     if (!dispatch.ok) return err(dispatch.code, dispatch.message);
 
+    // Optimistic insert: try to land the Job row + spawn the workflow
+    // before this call returns. Best-effort — the every-minute goldsky
+    // normalizer cron is the safety net if any step times out.
+    let optimistic: { jobId: string | null; txHash: Hex | null } = {
+        jobId: null,
+        txHash: null,
+    };
+    try {
+        optimistic = await landJobOptimistically({
+            queuedTxId: dispatch.transactionId,
+            state: dispatch.state,
+        });
+    } catch (e) {
+        console.warn(
+            "[post_job] optimistic land failed, falling back to cron normalizer",
+            e instanceof Error ? e.message : String(e),
+        );
+    }
+
     await db.auditLog.create({
         data: {
             actorKind: "agent",
@@ -121,13 +244,17 @@ export async function handlePostJob(
             payloadJsonb: {
                 circleTransactionId: dispatch.transactionId,
                 circleState: dispatch.state,
+                jobId: optimistic.jobId,
+                txHash: optimistic.txHash,
+                chainId: ARC_CHAIN_ID,
                 idempotencyKey: parse.data.idempotencyKey,
             } as object,
         },
     });
 
     return ok({
-        jobId: null,
+        jobId: optimistic.jobId,
+        txHash: optimistic.txHash,
         createTransactionId: dispatch.transactionId,
         createTxState: dispatch.state,
     });
