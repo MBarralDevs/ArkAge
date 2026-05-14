@@ -1,11 +1,10 @@
 import { z } from "zod";
 import { encodeFunctionData } from "viem";
-import { db } from "@/lib/db";
 import { ok, err, type Result } from "@/mcp/result";
 import { registerTool } from "@/mcp/server";
 import { ERC8183_ABI } from "@/lib/abis";
 import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
-import { signWithTier2 } from "@/lib/tier2-dcw";
+import { executeTier2Call } from "@/lib/tier2-dispatch";
 import { loadAgentByDbId } from "@/lib/agent-loader";
 
 /**
@@ -30,24 +29,19 @@ export async function handleClaimRefund(
     if (!parse.success) return err("validation_error", parse.error.message);
 
     const agent = await loadAgentByDbId(BigInt(parse.data.asAgent));
-    const wallet = await db.wallet.findUniqueOrThrow({
-        where: {
-            address: Buffer.from(agent.operatorWallet.toLowerCase().replace(/^0x/, ""), "hex"),
-        },
-    });
-    if (!wallet.circleWalletId) return err("config_error", "Tier 2 wallet missing circleWalletId");
 
     const callData = encodeFunctionData({
         abi: ERC8183_ABI,
         functionName: "claimRefund",
         args: [BigInt(parse.data.jobId)],
     });
-    const queued = await signWithTier2(
-        wallet.circleWalletId,
-        ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
-        callData,
-    );
-    return ok({ transactionId: queued.transactionId, state: queued.state });
+    const dispatch = await executeTier2Call({
+        agent,
+        to: ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
+        data: callData,
+    });
+    if (!dispatch.ok) return err(dispatch.code, dispatch.message);
+    return ok({ transactionId: dispatch.transactionId, state: dispatch.state });
 }
 
 registerTool({

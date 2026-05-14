@@ -18,12 +18,17 @@ import type { Address } from "viem";
  *  - fund_job: Tier 2 if within per-tx cap, Tier 1 if over
  *  - Everyday agent ops (post/accept/submit/x402-pay) → Tier 2
  *
- * Tier 2 kind dispatch (Plan E1):
- *  - "circle-dcw-eoa" or "external-eoa" (or undefined for back-compat)
- *    → "tier2-dcw" tag; signing via `signWithTier2` in tier2-dcw.ts.
- *  - "circle-agent-wallet" → "tier2-circle-agent-wallet" tag; signing
- *    happens outside ArkAge via the builder's local `circle` CLI session
- *    (no in-process signing path on Vercel functions).
+ * Tier 2 kind dispatch:
+ *  - "circle-dcw-eoa" (or undefined for back-compat) → "tier2-dcw";
+ *    signing via `signWithTier2` in tier2-dcw.ts (Circle DCW contract-
+ *    execution API; requires `circleWalletId` on the wallet row).
+ *  - "external-eoa" → "tier2-external-eoa"; signing via raw EOA key in
+ *    `tier2-external-eoa.ts` (env-staged `ARKAGE_TIER2_KEY_<walletId>`).
+ *    Testnet-only path; the unified signing facade for builders that
+ *    bring their own EOA outside of Circle's custody.
+ *  - "circle-agent-wallet" → "tier2-circle-agent-wallet"; signing happens
+ *    outside ArkAge via the builder's local `circle` CLI session (no
+ *    in-process signing path on Vercel functions).
  */
 
 /**
@@ -69,6 +74,7 @@ export type RoutingAction =
 export type RoutingDecision =
     | { wallet: "tier1-modular"; reason: string }
     | { wallet: "tier2-dcw" }
+    | { wallet: "tier2-external-eoa" }
     | { wallet: "tier2-circle-agent-wallet" }
     | { wallet: "tier3-validator" }
     | { wallet: "tier3-treasury" }
@@ -76,9 +82,16 @@ export type RoutingDecision =
     | { reject: true; reason: string };
 
 function tier2Decision(agent: AgentRoutingContext): RoutingDecision {
-    return agent.tier2Kind === "circle-agent-wallet"
-        ? { wallet: "tier2-circle-agent-wallet" }
-        : { wallet: "tier2-dcw" };
+    switch (agent.tier2Kind) {
+        case "circle-agent-wallet":
+            return { wallet: "tier2-circle-agent-wallet" };
+        case "external-eoa":
+            return { wallet: "tier2-external-eoa" };
+        case "circle-dcw-eoa":
+        case undefined:
+        default:
+            return { wallet: "tier2-dcw" };
+    }
 }
 
 export function route(action: RoutingAction): RoutingDecision {

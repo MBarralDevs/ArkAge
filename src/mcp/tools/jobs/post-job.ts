@@ -6,7 +6,7 @@ import { registerTool } from "@/mcp/server";
 import type { McpAuthContext } from "@/mcp/auth";
 import { ERC8183_ABI } from "@/lib/abis";
 import { ARC_TESTNET_ADDRESSES, ARKAGE_ADDRESSES } from "@/lib/addresses";
-import { signWithTier2 } from "@/lib/tier2-dcw";
+import { executeTier2Call } from "@/lib/tier2-dispatch";
 import { route } from "@/lib/wallet-router";
 import { evaluatePolicy } from "@/lib/policy-engine";
 import { loadAgentByDbId } from "@/lib/agent-loader";
@@ -73,11 +73,19 @@ export async function handlePostJob(
             operatorWallet: agent.operatorWallet,
             perTxCap: agent.perTxCap,
             active: agent.active,
+            ...(agent.tier2Kind ? { tier2Kind: agent.tier2Kind } : {}),
         },
     });
     if ("reject" in decision) return err("routing_rejected", decision.reason);
-    if (decision.wallet !== "tier2-dcw") {
-        return err("routing_unexpected", `expected tier2-dcw, got ${decision.wallet}`);
+    if (
+        decision.wallet !== "tier2-dcw" &&
+        decision.wallet !== "tier2-external-eoa" &&
+        decision.wallet !== "tier2-circle-agent-wallet"
+    ) {
+        return err(
+            "routing_unexpected",
+            `expected a tier-2 wallet, got ${decision.wallet}`,
+        );
     }
 
     const hookAddr = (parse.data.hook ?? ARKAGE_ADDRESSES.HOOK_COMPOSER) as
@@ -98,18 +106,12 @@ export async function handlePostJob(
         ],
     });
 
-    const wallet = await db.wallet.findUniqueOrThrow({
-        where: {
-            address: Buffer.from(agent.operatorWallet.toLowerCase().replace(/^0x/, ""), "hex"),
-        },
+    const dispatch = await executeTier2Call({
+        agent,
+        to: ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
+        data: callData,
     });
-    if (!wallet.circleWalletId) return err("config_error", "Tier 2 wallet missing circleWalletId");
-
-    const queued = await signWithTier2(
-        wallet.circleWalletId,
-        ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
-        callData,
-    );
+    if (!dispatch.ok) return err(dispatch.code, dispatch.message);
 
     await db.auditLog.create({
         data: {
@@ -117,8 +119,8 @@ export async function handlePostJob(
             actorId: agent.agentId.toString(),
             action: "post_job",
             payloadJsonb: {
-                circleTransactionId: queued.transactionId,
-                circleState: queued.state,
+                circleTransactionId: dispatch.transactionId,
+                circleState: dispatch.state,
                 idempotencyKey: parse.data.idempotencyKey,
             } as object,
         },
@@ -126,8 +128,8 @@ export async function handlePostJob(
 
     return ok({
         jobId: null,
-        createTransactionId: queued.transactionId,
-        createTxState: queued.state,
+        createTransactionId: dispatch.transactionId,
+        createTxState: dispatch.state,
     });
 }
 

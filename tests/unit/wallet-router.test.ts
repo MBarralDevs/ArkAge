@@ -129,15 +129,33 @@ describe("wallet router", () => {
             expect("wallet" in decision && decision.wallet).toBe("tier1-modular");
         });
 
-        it.each([
-            ["circle-dcw-eoa"] as const,
-            ["external-eoa"] as const,
-        ])("routes Tier 2 to tier2-dcw when tier2Kind is %s", (kind) => {
+        it("routes Tier 2 to tier2-dcw when tier2Kind is circle-dcw-eoa", () => {
             const decision = route({
                 kind: "post_job",
-                agent: { ...baseAgent, tier2Kind: kind },
+                agent: { ...baseAgent, tier2Kind: "circle-dcw-eoa" },
             });
             expect("wallet" in decision && decision.wallet).toBe("tier2-dcw");
+        });
+
+        it("routes Tier 2 to tier2-external-eoa when tier2Kind is external-eoa", () => {
+            const decision = route({
+                kind: "post_job",
+                agent: { ...baseAgent, tier2Kind: "external-eoa" },
+            });
+            expect("wallet" in decision && decision.wallet).toBe(
+                "tier2-external-eoa",
+            );
+        });
+
+        it("routes within-cap fund_job to tier2-external-eoa for external-EOA agents", () => {
+            const decision = route({
+                kind: "fund_job",
+                amount: 500_000n,
+                agent: { ...baseAgent, tier2Kind: "external-eoa" },
+            });
+            expect("wallet" in decision && decision.wallet).toBe(
+                "tier2-external-eoa",
+            );
         });
     });
 });
