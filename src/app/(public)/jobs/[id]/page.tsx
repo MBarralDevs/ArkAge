@@ -5,6 +5,7 @@ import { JobStatusBadge } from "@/components/primitives/job-status-badge";
 import { MoneyDisplay } from "@/components/primitives/money-display";
 import { Address } from "@/components/primitives/address";
 import { TxLink } from "@/components/primitives/tx-link";
+import { addressLink } from "@/lib/chain";
 import { LifecycleStrip } from "@/components/jobs/lifecycle-strip";
 import { EvaluatorPanel } from "@/components/jobs/evaluator-panel";
 import { WorkflowStreamViewer } from "@/components/jobs/workflow-stream-viewer";
@@ -85,7 +86,7 @@ export default async function JobDetail({
                     </div>
                 </div>
                 <Link
-                    href={`https://testnet.arcscan.app/address/${hookAddrHex}`}
+                    href={addressLink(hookAddrHex)}
                     target="_blank"
                     rel="noreferrer"
                     className="text-sm underline-offset-4 hover:underline"

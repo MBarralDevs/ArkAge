@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { txLink } from "@/lib/chain";
 
 /**
  * Plan E2 — surfaces the agent's ERC-8004 on-chain anchor (token id on
@@ -45,7 +46,7 @@ export function OnchainAnchorBadge({
         "0x" + Buffer.from(identityTxHash).toString("hex");
     return (
         <a
-            href={`https://testnet.arcscan.app/tx/${txHex}`}
+            href={txLink(txHex)}
             target="_blank"
             rel="noreferrer"
             className="no-underline"

@@ -2,6 +2,7 @@ import { createGatewayMiddleware } from "@circle-fin/x402-batching/server";
 import { db } from "./db";
 import { recordReceiptForSession } from "./x402-receipt-store";
 import { openOrJoinSession } from "./x402-session-manager";
+import { CAIP2 as ARC_TESTNET_CAIP2 } from "./chain";
 import type { Address } from "viem";
 
 /**
@@ -19,11 +20,10 @@ import type { Address } from "viem";
  *     `req.payment = { verified, payer, amount, network, transaction? }`
  *     once payment verifies.
  *
- * `networks` uses CAIP-2 strings: Arc Testnet chain id `5042002` →
- * `eip155:5042002`.
+ * `networks` uses CAIP-2 strings (e.g. Arc Testnet's `5042002` becomes
+ * `eip155:5042002`). The exact value is sourced from `chain.ts` so the
+ * mainnet flip is a one-file edit.
  */
-
-const ARC_TESTNET_CAIP2 = "eip155:5042002";
 
 export interface ProxyEndpoint {
     endpointId: bigint;
@@ -88,9 +88,9 @@ export async function proxyThroughGateway(
     // Circle's middleware defaults to https://gateway-api.circle.com
     // (mainnet), which doesn't list testnet networks → would return
     // HTTP 503 "No payment networks available" for Arc Testnet
-    // (eip155:5042002, only listed on the testnet facilitator).
-    // Per spec the testnet hostname is fixed; expose an env override
-    // for dev / mainnet promotion.
+    // (only the testnet facilitator lists Arc's CAIP-2). Default below
+    // is the testnet facilitator; mainnet promotion sets
+    // ARKAGE_X402_FACILITATOR_URL via env.
     const facilitatorUrl =
         process.env.ARKAGE_X402_FACILITATOR_URL ??
         "https://gateway-api-testnet.circle.com";

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { CHAIN_ID, CHAIN_ID_HEX } from "@/lib/chain";
 
 /**
  * Plan E2 Phase 3 — drives the two-tx on-chain anchoring flow from the
@@ -25,8 +26,6 @@ import { Button } from "@/components/ui/button";
  * builder can retry (the MCP handlers are idempotent — re-running picks
  * up wherever we got stuck).
  */
-
-const ARC_TESTNET_CHAIN_ID_HEX = "0x4cef52"; // 5042002 decimal
 
 type Phase =
     | "idle"
@@ -99,13 +98,13 @@ export function MintOnchainIdentityButton({
             try {
                 await window.ethereum.request({
                     method: "wallet_switchEthereumChain",
-                    params: [{ chainId: ARC_TESTNET_CHAIN_ID_HEX }],
+                    params: [{ chainId: CHAIN_ID_HEX }],
                 });
             } catch (e) {
                 // chain not added — surface the error rather than auto-add
                 // (avoids hard-coding RPC URLs in the client).
                 toast.error(
-                    "Switch to Arc Testnet (chain id 5042002) in your wallet and retry. " +
+                    `Switch to Arc Testnet (chain id ${CHAIN_ID}) in your wallet and retry. ` +
                         (e instanceof Error ? e.message : ""),
                 );
                 return null;

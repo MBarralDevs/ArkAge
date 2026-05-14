@@ -1,0 +1,27 @@
+{
+  "_comment": "Plan F mainnet-prep placeholder. Populated post-mainnet-deploy. Until then, every field is null on purpose — `src/lib/addresses.ts` reads ArkAge contracts from env vars, not from this file, so leaving values null here is safe.",
+  "chainId": null,
+  "deployedAt": null,
+  "deployer": null,
+  "salt": null,
+  "contracts": {
+    "AgentRegistry": null,
+    "PolicyHook": null,
+    "ReputationHook": null,
+    "EvaluatorFeeHook": null,
+    "HookComposer": null,
+    "RateLimitHook": null,
+    "RoyaltyHook": null
+  },
+  "canonical": {
+    "_comment": "Re-verify against Arc's mainnet docs before pinning. Testnet addresses are intentionally NOT copied here — every canonical contract gets re-checked at mainnet deploy time.",
+    "ERC_8183_AgenticCommerce": null,
+    "ERC_8004_IdentityRegistry": null,
+    "ERC_8004_ReputationRegistry": null,
+    "ERC_8004_ValidationRegistry": null,
+    "USDC": null,
+    "CircleGatewayWallet": null,
+    "CircleGatewayMinter": null
+  },
+  "treasury": null
+}

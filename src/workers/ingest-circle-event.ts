@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { resumeHook } from "workflow/api";
 import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
+import { CHAIN_ID as ARC_CHAIN_ID } from "@/lib/chain";
 import {
     jobFundedToken,
     jobSubmittedToken,
@@ -40,8 +41,6 @@ interface ContractEventNotification {
     blockTime: string;
     params: Record<string, unknown>;
 }
-
-const ARC_CHAIN_ID = 5042002;
 
 function bytesFromHex(hex: string) {
     return Buffer.from(hex.replace(/^0x/, ""), "hex");
