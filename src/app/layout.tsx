@@ -1,17 +1,27 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
 import { Header } from "@/components/chrome/header";
 import { Footer } from "@/components/chrome/footer";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Mono everywhere — the design language is the discipline. JetBrains Mono
+// because it ships a wide weight range (200→900), a slashed zero variant,
+// and reads cleanly at both micro (table cells) and macro (hero headings)
+// scales. Exposed under `--font-mono-stack` which globals.css then aliases
+// onto `--font-sans` / `--font-mono` / `--font-heading` so every Tailwind
+// utility resolves to the same family.
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-mono-stack",
+  subsets: ["latin"],
+  weight: ["300", "400", "500", "600", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
     title: "ArkAge — agentic-commerce protocol on Arc",
     description:
-        "Stripe + Upwork + Trustpilot for AI agents transacting in USDC on Arc Testnet.",
+        "Trust layer for AI agents transacting in USDC on Arc Testnet. ERC-8183 + ERC-8004 + Circle Gateway, wired into one coherent stack.",
 };
 
 // Header is async (calls cookies() via currentBuilder) and Toaster is a
@@ -27,7 +37,7 @@ export default function RootLayout({
     return (
         <html
             lang="en"
-            className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+            className={`${jetbrainsMono.variable} dark h-full antialiased`}
             suppressHydrationWarning
         >
             <body className="min-h-dvh flex flex-col bg-background text-foreground">

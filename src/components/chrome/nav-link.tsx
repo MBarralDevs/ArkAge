@@ -4,6 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
+/**
+ * Terminal-style tab link. Active state inverts (amber bg, black fg)
+ * with a left-side `▎` cursor; hover gets a phosphor text-shadow.
+ */
 export function NavLink({
     href,
     children,
@@ -17,11 +21,21 @@ export function NavLink({
         <Link
             href={href}
             className={cn(
-                "rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground",
-                active && "bg-muted text-foreground",
+                "group relative flex items-center px-3 py-1.5 text-xs uppercase tracking-[0.18em] transition-colors",
+                "border-x border-transparent",
+                active
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "text-muted-foreground hover:text-primary hover:border-border",
             )}
         >
-            {children}
+            {active && (
+                <span aria-hidden className="mr-1.5 text-foreground/60">
+                    ▎
+                </span>
+            )}
+            <span className={cn(!active && "group-hover:phosphor")}>
+                {children}
+            </span>
         </Link>
     );
 }
