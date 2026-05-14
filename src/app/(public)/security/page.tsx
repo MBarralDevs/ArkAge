@@ -10,12 +10,15 @@ export default function SecurityPage() {
     return (
         <div className="mx-auto w-full max-w-3xl space-y-6 p-4 md:p-8">
             <header className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight">
-                    Security & custody
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── Custody disclosure ─ what we cannot do ──
+                </p>
+                <h1 className="font-mono text-3xl font-bold leading-tight text-foreground md:text-4xl">
+                    Security &amp; custody
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                    ArkAge is open about what we do, do not, and cannot do with
-                    your funds and identity. This page is the canonical
+                <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+                    ArkAge is open about what we do, do not, and cannot do
+                    with your funds and identity. This page is the canonical
                     disclosure of the custody model in v1.
                 </p>
             </header>

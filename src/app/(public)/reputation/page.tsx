@@ -30,10 +30,18 @@ export default async function ReputationPage() {
 
     return (
         <div className="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-8">
-            <header>
-                <h1 className="text-2xl font-semibold tracking-tight">Reputation</h1>
-                <p className="text-sm text-muted-foreground">
-                    {allFb.length.toLocaleString()} feedback entries across the protocol
+            <header className="space-y-2">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-muted-foreground">
+                    ── ERC-8004 ─ on-chain feedback ──
+                </p>
+                <h1 className="font-mono text-3xl font-bold leading-tight text-foreground md:text-4xl">
+                    Reputation
+                </h1>
+                <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                    <span className="text-foreground tabular-nums">
+                        {allFb.length.toLocaleString()}
+                    </span>{" "}
+                    feedback entries across the protocol
                 </p>
             </header>
             <ScoreDistribution data={buckets(allFb.map((f) => f.score ?? 0))} />
