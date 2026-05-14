@@ -76,6 +76,96 @@ async function handleAgentRegistered(
     });
 }
 
+/**
+ * Land a JobCreated event into the `jobs` table. Idempotent — second
+ * delivery is a no-op via Prisma `upsert`. Skips when the client or
+ * (non-zero) provider isn't a known ArkAge agent — ERC-8183 is a shared
+ * public protocol and we only track jobs whose client agent is in our
+ * registry. The job_events row is still recorded against the on-chain
+ * actor address so analytics can see foreign activity if needed.
+ */
+export async function handleJobCreated(
+    data: ContractEventNotification,
+): Promise<void> {
+    const p = data.params as {
+        jobId?: string;
+        client?: string;
+        provider?: string;
+        evaluator?: string;
+        expiredAt?: string;
+        hook?: string;
+    };
+    if (!p.jobId || !p.client || !p.evaluator || !p.expiredAt) return;
+
+    const clientBytes = bytesFromHex(p.client);
+    const clientWallet = await db.wallet.findUnique({
+        where: { address: clientBytes },
+    });
+    if (!clientWallet) return;
+    const clientAgent = await db.agent.findFirst({
+        where: { currentOperatorWalletId: clientWallet.id },
+    });
+    if (!clientAgent) return;
+
+    let providerAgentId: bigint | null = null;
+    if (
+        p.provider &&
+        p.provider.toLowerCase() !==
+            "0x0000000000000000000000000000000000000000"
+    ) {
+        const providerWallet = await db.wallet.findUnique({
+            where: { address: bytesFromHex(p.provider) },
+        });
+        if (providerWallet) {
+            const a = await db.agent.findFirst({
+                where: { currentOperatorWalletId: providerWallet.id },
+            });
+            providerAgentId = a?.id ?? null;
+        }
+    }
+
+    const job = await db.job.upsert({
+        where: { jobId: p.jobId },
+        update: {},
+        create: {
+            jobId: p.jobId,
+            clientAgentId: clientAgent.id,
+            providerAgentId,
+            evaluatorAddress: bytesFromHex(p.evaluator),
+            status: "open",
+            hookAddress: bytesFromHex(
+                p.hook ?? "0x0000000000000000000000000000000000000000",
+            ),
+            expiredAt: new Date(Number(p.expiredAt) * 1000),
+            createdAtBlock: BigInt(data.blockNumber),
+        },
+    });
+
+    await db.jobEvent
+        .upsert({
+            where: {
+                chainId_txHash_logIndex: {
+                    chainId: ARC_CHAIN_ID,
+                    txHash: bytesFromHex(data.txHash),
+                    logIndex: data.logIndex,
+                },
+            },
+            update: {},
+            create: {
+                jobId: job.id,
+                eventKind: "created",
+                actorAddress: clientBytes,
+                payloadJsonb: data.params as object,
+                chainId: ARC_CHAIN_ID,
+                txHash: bytesFromHex(data.txHash),
+                logIndex: data.logIndex,
+                blockNumber: BigInt(data.blockNumber),
+                blockTime: new Date(data.blockTime),
+            },
+        })
+        .catch(() => {});
+}
+
 async function handle8183JobEvent(
     data: ContractEventNotification,
     tokenFn: (jobId: bigint) => string,
@@ -89,25 +179,74 @@ async function handle8183JobEvent(
         where: { jobId: jobId.toString() },
     });
     if (job) {
-        await db.jobEvent.create({
-            data: {
-                jobId: job.id,
-                eventKind,
-                actorAddress: bytesFromHex(
-                    ((data.params as { actor?: string }).actor) ??
-                        data.contractAddress,
-                ),
-                payloadJsonb: data.params as object,
-                chainId: ARC_CHAIN_ID,
-                txHash: bytesFromHex(data.txHash),
-                logIndex: data.logIndex,
-                blockNumber: BigInt(data.blockNumber),
-                blockTime: new Date(data.blockTime),
-            },
-        });
+        const p = data.params as {
+            actor?: string;
+            funder?: string;
+            provider?: string;
+            evaluator?: string;
+            amount?: string;
+            reason?: string;
+        };
+        const actor =
+            p.actor ?? p.funder ?? p.provider ?? p.evaluator ?? data.contractAddress;
+
+        await db.jobEvent
+            .upsert({
+                where: {
+                    chainId_txHash_logIndex: {
+                        chainId: ARC_CHAIN_ID,
+                        txHash: bytesFromHex(data.txHash),
+                        logIndex: data.logIndex,
+                    },
+                },
+                update: {},
+                create: {
+                    jobId: job.id,
+                    eventKind,
+                    actorAddress: bytesFromHex(actor),
+                    payloadJsonb: data.params as object,
+                    chainId: ARC_CHAIN_ID,
+                    txHash: bytesFromHex(data.txHash),
+                    logIndex: data.logIndex,
+                    blockNumber: BigInt(data.blockNumber),
+                    blockTime: new Date(data.blockTime),
+                },
+            })
+            .catch(() => {});
+
+        const order: Record<string, number> = {
+            open: 0,
+            funded: 1,
+            submitted: 2,
+            completed: 3,
+            rejected: 3,
+            expired: 3,
+        };
+        const cur = order[job.status] ?? 0;
+        const next = order[eventKind] ?? 0;
+        if (next > cur) {
+            const update: Record<string, unknown> = { status: eventKind };
+            if (eventKind === "funded" && p.amount) {
+                update.budget = p.amount;
+            }
+            if ((eventKind === "completed" || eventKind === "rejected") && p.reason) {
+                update.reasonHash = bytesFromHex(p.reason);
+                update.completedAtBlock = BigInt(data.blockNumber);
+            }
+            await db.job.update({
+                where: { id: job.id },
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                data: update as any,
+            });
+        }
     }
 
-    await resumeHook(tokenFn(jobId), data.params);
+    await resumeHook(tokenFn(jobId), data.params).catch(() => {
+        // Hook may not exist when there's no live workflow listening for
+        // this jobId (e.g., backfill of a foreign job, or no workflow ever
+        // started). Treat as no-op — the JobEvent + status update above
+        // still landed.
+    });
 }
 
 async function handleReputationFeedback(
@@ -164,6 +303,10 @@ async function routeContractEvent(
     if (
         addr === ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE.toLowerCase()
     ) {
+        if (notification.eventName === "JobCreated") {
+            await handleJobCreated(notification);
+            return;
+        }
         if (notification.eventName === "JobFunded") {
             await handle8183JobEvent(notification, jobFundedToken, "funded");
             return;
