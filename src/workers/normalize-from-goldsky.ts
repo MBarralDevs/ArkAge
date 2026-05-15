@@ -38,7 +38,17 @@ import {
 
 const SOURCE = "goldsky";
 const LOOKBACK_ON_INIT = 10_000n; // ~3h on Arc
-const BATCH_SIZE = 1_000;
+const BATCH_SIZE = 250;
+/**
+ * Wall-clock budget for one `normalizeFromGoldsky` call. Each row costs
+ * several Neon roundtrips (decode is cheap; the audit_log dedup + insert
+ * and the Job/JobEvent writes dominate), so a stale cursor can imply a
+ * multi-thousand-row backlog that far outlasts a single function
+ * invocation. The loop checks this deadline between rows and returns
+ * early with the cursor advanced to the last fully-processed block —
+ * the external 5-min scheduler then picks up where it left off.
+ */
+const TIME_BUDGET_MS = 45_000;
 
 interface CanonicalContract {
     address: `0x${string}`;
@@ -255,6 +265,7 @@ export interface NormalizeReport {
     toBlock: bigint;
     rowsProcessed: number;
     rowsDispatched: number;
+    budgetExhausted: boolean;
 }
 
 export async function normalizeFromGoldsky(): Promise<NormalizeReport[]> {
@@ -262,10 +273,23 @@ export async function normalizeFromGoldsky(): Promise<NormalizeReport[]> {
     // future revision swaps codepaths.
     void handleJobCreated;
 
+    const deadline = Date.now() + TIME_BUDGET_MS;
     const reports: NormalizeReport[] = [];
 
     for (const contract of CONTRACTS) {
         const startBlock = await getOrInitCursor(contract.address);
+
+        if (Date.now() >= deadline) {
+            reports.push({
+                contractAddress: contract.address,
+                fromBlock: startBlock,
+                toBlock: startBlock,
+                rowsProcessed: 0,
+                rowsDispatched: 0,
+                budgetExhausted: true,
+            });
+            continue;
+        }
 
         const rows = (await db.$queryRawUnsafe(
             `SELECT
@@ -295,10 +319,30 @@ export async function normalizeFromGoldsky(): Promise<NormalizeReport[]> {
         }>;
 
         let dispatched = 0;
-        let maxBlock = startBlock;
+        let processed = 0;
+        // Highest block whose every row has been processed. The cursor
+        // only ever advances to here — never into a partially-processed
+        // block, since the next query is `block_number > cursor` and
+        // would otherwise skip that block's remaining logs.
+        let lastCompletedBlock = startBlock;
+        let currentBlock: bigint | null = null;
+        let budgetExhausted = false;
+
         for (const raw of rows) {
+            const blockNumber = BigInt(raw.block_number);
+
+            // A new block means every row of the previous block is done.
+            if (currentBlock !== null && blockNumber > currentBlock) {
+                lastCompletedBlock = currentBlock;
+                if (Date.now() >= deadline) {
+                    budgetExhausted = true;
+                    break;
+                }
+            }
+            currentBlock = blockNumber;
+
             const row: RawLogRow = {
-                block_number: BigInt(raw.block_number),
+                block_number: blockNumber,
                 log_index: BigInt(raw.log_index),
                 transaction_hash: raw.transaction_hash,
                 address: raw.address,
@@ -319,20 +363,29 @@ export async function normalizeFromGoldsky(): Promise<NormalizeReport[]> {
                     );
                 }
             }
-            if (row.block_number > maxBlock) maxBlock = row.block_number;
+            processed++;
         }
 
-        if (maxBlock > startBlock) {
-            await advanceCursor(contract.address, maxBlock);
+        // If the loop drained the whole batch (no early break), the final
+        // block is also fully processed.
+        if (!budgetExhausted && currentBlock !== null) {
+            lastCompletedBlock = currentBlock;
+        }
+
+        if (lastCompletedBlock > startBlock) {
+            await advanceCursor(contract.address, lastCompletedBlock);
         }
 
         reports.push({
             contractAddress: contract.address,
             fromBlock: startBlock,
-            toBlock: maxBlock,
-            rowsProcessed: rows.length,
+            toBlock: lastCompletedBlock,
+            rowsProcessed: processed,
             rowsDispatched: dispatched,
+            budgetExhausted,
         });
+
+        if (budgetExhausted) break;
     }
 
     return reports;
