@@ -119,13 +119,14 @@ export const ERC8183_ABI = [
             {
                 type: "tuple",
                 components: [
+                    { type: "uint256", name: "id" },
                     { type: "address", name: "client" },
                     { type: "address", name: "provider" },
                     { type: "address", name: "evaluator" },
+                    { type: "string", name: "description" },
                     { type: "uint256", name: "budget" },
                     { type: "uint256", name: "expiredAt" },
                     { type: "uint8", name: "status" },
-                    { type: "bytes32", name: "reason" },
                     { type: "address", name: "hook" },
                 ],
             },

@@ -146,8 +146,18 @@ export async function handleJobCreated(
     // self-rescuing await chain (funded → submitted → evaluator child →
     // terminal). Idempotent via workflow_runs lookup so backfill and
     // replays from the cron don't multi-start.
+    // `kind` must match the string jobLifecycle passes to
+    // recordWorkflowStart ("job_lifecycle") — otherwise the idempotency
+    // check never finds an existing run and every re-delivery of
+    // JobCreated spawns a duplicate workflow. Only an active or
+    // successful run blocks a spawn; a failed/cancelled run is treated
+    // as re-spawnable so JobCreated re-delivery doubles as recovery.
     const existingRun = await db.workflowRun.findFirst({
-        where: { kind: "jobLifecycle", kindId: BigInt(p.jobId) },
+        where: {
+            kind: "job_lifecycle",
+            kindId: BigInt(p.jobId),
+            status: { in: ["running", "completed"] },
+        },
         select: { runId: true },
     });
     if (!existingRun) {

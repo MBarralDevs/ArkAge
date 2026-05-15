@@ -25,17 +25,26 @@ const STATUS_LABELS: readonly JobStatusEnum[] = [
 ];
 
 export interface OnChainJob {
+    id: bigint;
     client: Address;
     provider: Address;
     evaluator: Address;
+    description: string;
     budget: bigint;
     expiredAt: bigint;
     status: JobStatusEnum;
-    reason: `0x${string}`;
     hook: Address;
 }
 
-/** Read the canonical job tuple from the ERC-8183 AgenticCommerce contract. */
+/**
+ * Read the canonical job tuple from the ERC-8183 AgenticCommerce contract.
+ *
+ * The struct order is verified against the deployed implementation
+ * (0xa316…351a, the ERC-1967 impl behind the 0x0747… proxy):
+ * {id, client, provider, evaluator, description, budget, expiredAt,
+ * status, hook}. The deliverable hash is NOT in the struct — it lives
+ * only in the JobSubmitted event.
+ */
 export async function readJob(jobId: bigint): Promise<OnChainJob> {
     const raw = await publicClient.readContract({
         address: ARC_TESTNET_ADDRESSES.ERC_8183_AGENTIC_COMMERCE,
@@ -47,13 +56,14 @@ export async function readJob(jobId: bigint): Promise<OnChainJob> {
     const status = STATUS_LABELS[statusIndex];
     if (!status) throw new Error(`Unknown job status index ${statusIndex}`);
     return {
+        id: raw.id,
         client: raw.client,
         provider: raw.provider,
         evaluator: raw.evaluator,
+        description: raw.description,
         budget: raw.budget,
         expiredAt: raw.expiredAt,
         status,
-        reason: raw.reason,
         hook: raw.hook,
     };
 }

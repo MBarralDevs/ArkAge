@@ -52,9 +52,26 @@ async function loadJobContext(
     "use step";
     console.log(`[evaluator] loadJobContext jobId=${jobId}`);
     const job = await readJob(jobId);
-    const dbJob = await db.job.findUnique({ where: { jobId: jobId.toString() } });
-    const description = dbJob?.descriptionUri ?? "(no description URI)";
-    return { description, budget: job.budget, deliverableHash: job.reason };
+    // The deliverable hash is not in the on-chain Job struct — it is only
+    // emitted in the JobSubmitted event. The normalizer persists that
+    // event's params (incl. `deliverable`) into job_events.
+    const dbJob = await db.job.findUnique({
+        where: { jobId: jobId.toString() },
+        include: {
+            events: {
+                where: { eventKind: "submitted" },
+                orderBy: { blockNumber: "desc" },
+                take: 1,
+            },
+        },
+    });
+    const submitted = dbJob?.events[0];
+    const deliverableHash =
+        (submitted?.payloadJsonb as { deliverable?: string } | null)
+            ?.deliverable ?? `0x${"0".repeat(64)}`;
+    const description =
+        job.description || dbJob?.descriptionUri || "(no description)";
+    return { description, budget: job.budget, deliverableHash };
 }
 
 async function fetchDeliverable(deliverableHash: string): Promise<string> {
