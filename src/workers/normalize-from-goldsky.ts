@@ -77,7 +77,7 @@ const ERC8183_EVENTS = [
 
 const REPUTATION_EVENTS = [
     parseAbiItem(
-        "event FeedbackGiven(uint256 indexed agentId, address indexed submitter, uint8 value, bytes32 tag1, bytes32 tag2, bytes32 feedbackHash)",
+        "event NewFeedback(uint256 indexed agentId, address indexed clientAddress, uint64 feedbackIndex, int128 value, uint8 valueDecimals, string indexed indexedTag1, string tag1, string tag2, string endpoint, string feedbackURI, bytes32 feedbackHash)",
     ),
 ] as const;
 
@@ -129,8 +129,8 @@ const CONTRACTS: CanonicalContract[] = [
         REPUTATION_EVENTS,
         [
             {
-                name: "FeedbackGiven",
-                sig: "FeedbackGiven(uint256,address,uint8,bytes32,bytes32,bytes32)",
+                name: "NewFeedback",
+                sig: "NewFeedback(uint256,address,uint64,int128,uint8,string,string,string,string,string,bytes32)",
             },
         ],
     ),

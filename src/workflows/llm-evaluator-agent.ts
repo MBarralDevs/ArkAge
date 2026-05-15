@@ -6,7 +6,11 @@ import { keccak256, toHex } from "viem";
 import { db } from "@/lib/db";
 import { readJob } from "@/lib/erc8183-state";
 import { persistEvidence, type EvidenceRecord } from "@/lib/evidence-store";
-import { callComplete, callReject } from "./lib/settlement-steps";
+import {
+    callComplete,
+    callReject,
+    writeReputationFeedback,
+} from "./lib/settlement-steps";
 import { evaluatorDoneToken, jobTerminalToken } from "./lib/hook-tokens";
 import {
     EVALUATOR_PROMPT_VERSION,
@@ -230,7 +234,7 @@ export async function llmEvaluatorAgent(jobId: bigint, tier: EvaluatorTier) {
         };
     }
 
-    const { evidenceHash } = await persistEvaluation({
+    const { evidenceUri, evidenceHash } = await persistEvaluation({
         jobId,
         tier,
         model: modelForTier(tier),
@@ -245,6 +249,22 @@ export async function llmEvaluatorAgent(jobId: bigint, tier: EvaluatorTier) {
     } else {
         await callReject(jobId, evidenceHash);
     }
+
+    // Option C: write on-chain reputation straight to ERC-8004 with the
+    // same evidence hash that settled the job — the cryptographic thread
+    // from evaluation to settlement to reputation. Skips gracefully when
+    // the provider isn't anchored; never blocks the settled job.
+    const feedback = await writeReputationFeedback({
+        jobId,
+        score: parsed.score,
+        verdict: parsed.verdict,
+        evidenceUri,
+        evidenceHash,
+    });
+    console.log(
+        `[evaluator] reputation feedback jobId=${jobId} outcome=${feedback.kind}` +
+            (feedback.kind === "skipped" ? ` reason=${feedback.reason}` : ""),
+    );
 
     await fireEvaluatorDoneHook(jobId, {
         verdict: parsed.verdict,

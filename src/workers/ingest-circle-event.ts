@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { resumeHook, start } from "workflow/api";
 import { ARC_TESTNET_ADDRESSES } from "@/lib/addresses";
 import { CHAIN_ID as ARC_CHAIN_ID } from "@/lib/chain";
+import { env } from "@/lib/env";
 import {
     jobFundedToken,
     jobSubmittedToken,
@@ -285,18 +286,33 @@ async function handle8183JobEvent(
 async function handleReputationFeedback(
     data: ContractEventNotification,
 ): Promise<void> {
+    // ERC-8004 ReputationRegistry emits NewFeedback. Its `agentId` is the
+    // on-chain identity token id, which maps to agents.chain_agent_id —
+    // NOT the ArkAge agentId string.
     const p = data.params as {
         agentId?: string;
-        value?: number;
+        clientAddress?: string;
+        value?: string;
+        valueDecimals?: string;
         tag1?: string;
         tag2?: string;
+        endpoint?: string;
+        feedbackURI?: string;
         feedbackHash?: string;
     };
     if (!p.agentId) return;
     const agent = await db.agent.findUnique({
-        where: { agentId: p.agentId },
+        where: { chainAgentId: BigInt(p.agentId) },
     });
     if (!agent) return;
+
+    const submitter = p.clientAddress ?? data.contractAddress;
+    const validator =
+        env.ARKAGE_VALIDATOR_WALLET_ADDRESS?.toLowerCase() ?? null;
+    const source =
+        validator && submitter.toLowerCase() === validator
+            ? "arkage"
+            : "external";
 
     await db.reputationFeedback.upsert({
         where: {
@@ -309,11 +325,17 @@ async function handleReputationFeedback(
         update: {},
         create: {
             agentId: agent.id,
-            submitterAddress: bytesFromHex(data.contractAddress),
-            source: "arkage_hook",
-            score: p.value ?? null,
+            submitterAddress: bytesFromHex(submitter),
+            source,
+            score: p.value !== undefined ? Number(p.value) : null,
+            decimals:
+                p.valueDecimals !== undefined
+                    ? Number(p.valueDecimals)
+                    : null,
             tag1: p.tag1 ?? null,
             tag2: p.tag2 ?? null,
+            endpoint: p.endpoint ?? null,
+            feedbackUri: p.feedbackURI ?? null,
             feedbackHash: p.feedbackHash ? bytesFromHex(p.feedbackHash) : null,
             chainId: ARC_CHAIN_ID,
             txHash: bytesFromHex(data.txHash),
@@ -361,7 +383,7 @@ async function routeContractEvent(
     if (
         addr === ARC_TESTNET_ADDRESSES.ERC_8004_REPUTATION_REGISTRY.toLowerCase()
     ) {
-        if (notification.eventName === "FeedbackGiven") {
+        if (notification.eventName === "NewFeedback") {
             await handleReputationFeedback(notification);
         }
     }
