@@ -334,19 +334,30 @@ async function main() {
 
     // ─────────────────────────────────────────────────────────────
     header("STEP 4 — provider submits work");
-    const deliverable = `# Smoke deliverable\n\nArc Testnet, sub-second seal — \nUSDC sings beneath the chain, gas glows native amber.\nSettlement is breath.\n\n(jobId=${jobId})`;
-    const deliverableHash = keccak256(toBytes(deliverable));
-    console.log("  deliverable hash:", deliverableHash);
+    // A genuine on-topic haiku — submit_work hosts this content and
+    // commits its hash, so the evaluator fetches the real deliverable
+    // (not a parking page) and can judge it on merit.
+    const deliverable =
+        `Stablecoin daylight —\n` +
+        `Arc seals each block in a breath,\n` +
+        `gas paid in dollars.\n\n` +
+        `— deliverable for ArkAge job #${jobId}`;
     const submitRes = await handleSubmitWork({
         asAgent: PROVIDER_AGENT_DBID,
         jobId: jobId.toString(),
-        deliverableHash,
+        deliverable,
         idempotencyKey: `smoke-submit-${jobId}-${runStamp}`,
     });
     if (!submitRes.ok)
         throw new Error(
             `submit_work failed: ${submitRes.code} — ${submitRes.message}`,
         );
+    console.log(
+        "  deliverable hosted:",
+        submitRes.data.deliverableUri,
+        "\n  hash:",
+        submitRes.data.deliverableHash,
+    );
     await waitForCircleTxHash(submitRes.data.transactionId, "submit");
 
     // ─────────────────────────────────────────────────────────────

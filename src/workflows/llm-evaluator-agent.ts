@@ -2,7 +2,7 @@ import { DurableAgent } from "@workflow/ai/agent";
 import { getWritable } from "workflow";
 import { resumeHook } from "workflow/api";
 import { stepCountIs, type UIMessageChunk, type ModelMessage } from "ai";
-import { keccak256, toHex } from "viem";
+import { keccak256, toBytes, toHex } from "viem";
 import { db } from "@/lib/db";
 import { readJob } from "@/lib/erc8183-state";
 import { persistEvidence, type EvidenceRecord } from "@/lib/evidence-store";
@@ -90,7 +90,19 @@ async function fetchDeliverable(deliverableHash: string): Promise<string> {
         console.log(`[evaluator] fetchDeliverable failed status=${res.status}`);
         return `(deliverable unavailable: ${res.status})`;
     }
-    return await res.text();
+    const content = await res.text();
+    // Integrity gate: the fetched bytes must hash to the on-chain
+    // commitment. ArkAge hosts the deliverable but is trusted only for
+    // availability — a mismatch means tampering or a wrong URL, and the
+    // evaluator must not score content that isn't what was committed.
+    const actual = keccak256(toBytes(content));
+    if (actual.toLowerCase() !== deliverableHash.toLowerCase()) {
+        console.log(
+            `[evaluator] fetchDeliverable hash mismatch expected=${deliverableHash} actual=${actual}`,
+        );
+        return "(deliverable integrity check failed — content does not match the on-chain hash)";
+    }
+    return content;
 }
 
 async function persistEvaluation(args: {
