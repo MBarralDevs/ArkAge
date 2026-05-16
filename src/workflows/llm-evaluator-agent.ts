@@ -162,7 +162,15 @@ async function fireEvaluatorDoneHook(
     console.log(
         `[evaluator] fireEvaluatorDoneHook jobId=${jobId} verdict=${payload.verdict}`,
     );
-    await resumeHook(evaluatorDoneToken(jobId), payload);
+    // A hook is the fast-path nudge, not the only path. If jobLifecycle
+    // already advanced past its await (self-rescue chain poll) or never
+    // registered this token, resumeHook throws HookNotFound — benign, the
+    // settlement has already landed on-chain. Never fail the step for it.
+    await resumeHook(evaluatorDoneToken(jobId), payload).catch((e) => {
+        console.log(
+            `[evaluator] evaluatorDone hook had no listener jobId=${jobId} (${e instanceof Error ? e.message : String(e)})`,
+        );
+    });
 }
 
 async function fireJobTerminalHook(
@@ -171,7 +179,50 @@ async function fireJobTerminalHook(
 ): Promise<void> {
     "use step";
     console.log(`[evaluator] fireJobTerminalHook jobId=${jobId} status=${status}`);
-    await resumeHook(jobTerminalToken(jobId), { status });
+    await resumeHook(jobTerminalToken(jobId), { status }).catch((e) => {
+        console.log(
+            `[evaluator] jobTerminal hook had no listener jobId=${jobId} (${e instanceof Error ? e.message : String(e)})`,
+        );
+    });
+}
+
+/**
+ * Parse the evaluator model's reply into a structured verdict.
+ *
+ * Models routinely wrap JSON in ```json fences or surround it with prose,
+ * so a bare `JSON.parse` fails on otherwise-valid output. Strip a fence
+ * if present, narrow to the outermost `{...}`, then parse and shape-check.
+ * Returns null when nothing usable is found — the caller defaults to a
+ * conservative reject.
+ */
+function parseEvaluatorOutput(text: string): EvaluatorOutput | null {
+    let t = text.trim();
+    const fence = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    if (fence?.[1]) t = fence[1].trim();
+    const start = t.indexOf("{");
+    const end = t.lastIndexOf("}");
+    if (start === -1 || end <= start) return null;
+    try {
+        const obj = JSON.parse(t.slice(start, end + 1)) as
+            Partial<EvaluatorOutput>;
+        if (
+            (obj.verdict === "accept" || obj.verdict === "reject") &&
+            typeof obj.score === "number"
+        ) {
+            return {
+                verdict: obj.verdict,
+                score: obj.score,
+                reasoning:
+                    typeof obj.reasoning === "string" ? obj.reasoning : "",
+                concerns: Array.isArray(obj.concerns)
+                    ? obj.concerns.map((c) => String(c))
+                    : [],
+            };
+        }
+        return null;
+    } catch {
+        return null;
+    }
 }
 
 function extractAssistantText(messages: ModelMessage[]): string {
@@ -222,17 +273,15 @@ export async function llmEvaluatorAgent(jobId: bigint, tier: EvaluatorTier) {
     });
 
     const text = extractAssistantText(result.messages);
-    let parsed: EvaluatorOutput;
-    try {
-        parsed = JSON.parse(text);
-    } catch {
-        parsed = {
-            verdict: "reject",
-            score: -100,
-            reasoning: "Evaluator failed to produce parseable JSON output",
-            concerns: ["malformed_output"],
-        };
-    }
+    const parsed: EvaluatorOutput = parseEvaluatorOutput(text) ?? {
+        verdict: "reject",
+        score: -100,
+        reasoning: "Evaluator failed to produce parseable JSON output",
+        concerns: ["malformed_output"],
+    };
+    console.log(
+        `[evaluator] parsed verdict=${parsed.verdict} score=${parsed.score} jobId=${jobId}`,
+    );
 
     const { evidenceUri, evidenceHash } = await persistEvaluation({
         jobId,
